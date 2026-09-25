@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet. See the sections below for the shape a release entry takes.
+### Added
+
+- Setup and deployment documentation under `docs/`:
+  - `docs/VS-CODE-SETUP.md` — VS Code + GitHub Copilot Chat setup
+  - `docs/CLAUDE-DESKTOP-SETUP.md` — Claude Desktop setup (plus a Claude Code CLI appendix)
+  - `docs/SALESFORCE-CONNECTED-APP-GUIDE.md` — Connected App creation and scope mapping
+  - `docs/DEPLOYMENT-GUIDE.md` — stdio model, Docker, env management, multi-org, logging, monitoring
+- `Dockerfile` (multi-stage, non-root) and `.dockerignore` for containerized runs.
 
 ## [1.0.0] - 2026-09-25
 

@@ -193,6 +193,15 @@ mcnext_list_endpoints  ->  mcnext_describe_endpoint  ->  mcnext_query / read / c
 - Resources: `mcnext://catalog` (full catalog), `mcnext://overview` (auth model, bases, stats)
 - Prompts: `explore-mc-next`, `explore-salesforce-org`
 
+## Documentation
+
+| Guide | What it covers |
+| --- | --- |
+| [VS Code + Copilot setup](docs/VS-CODE-SETUP.md) | Prerequisites, `mcp.json` format, verification prompts, troubleshooting |
+| [Claude Desktop setup](docs/CLAUDE-DESKTOP-SETUP.md) | Config file locations, `mcpServers` format, logs, Claude Code CLI |
+| [Salesforce Connected App guide](docs/SALESFORCE-CONNECTED-APP-GUIDE.md) | Creating the Connected App, scope → capability mapping, secrets, rotation |
+| [Deployment guide](docs/DEPLOYMENT-GUIDE.md) | stdio model, Docker, env var management, multi-org, logging, monitoring |
+
 ## Install
 
 ```bash
@@ -269,6 +278,11 @@ Both flags must be set explicitly; neither is implied by the other.
 
 ## Use with an MCP client
 
+The example below uses the **Claude Desktop** shape (`mcpServers`). VS Code uses
+the key **`servers`** and requires `"type": "stdio"` — see
+[VS-CODE-SETUP.md](docs/VS-CODE-SETUP.md) for the exact format, and
+[CLAUDE-DESKTOP-SETUP.md](docs/CLAUDE-DESKTOP-SETUP.md) for config file locations.
+
 ```json
 {
   "mcpServers": {
@@ -295,6 +309,11 @@ npm run build      # tsc -> dist/
 npm run dev        # tsc --watch
 npm run smoke      # end-to-end MCP client test (no credentials needed)
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the catalog regeneration workflow, code
+standards, and the commit message format. For running the server in Docker, on
+multiple orgs, or with debug logging, see
+[DEPLOYMENT-GUIDE.md](docs/DEPLOYMENT-GUIDE.md).
 
 ### Scripts
 

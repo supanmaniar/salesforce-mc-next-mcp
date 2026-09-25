@@ -1,0 +1,22 @@
+# Keep the build context small and avoid leaking local state / secrets.
+
+node_modules
+dist
+
+# Never copy local credentials into an image layer.
+.env
+.env.*
+
+.git
+.gitignore
+
+# Docs, tests, and scripts are not needed to build or run the server.
+docs
+*.md
+scripts
+
+# Editor / OS noise
+.vscode
+.idea
+.DS_Store
+*.log

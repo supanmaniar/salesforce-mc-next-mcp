@@ -10,7 +10,10 @@
   "files": [
     "dist",
     "catalog",
-    "README.md"
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md"
   ],
   "scripts": {
     "generate": "node scripts/generate-catalog.mjs",
