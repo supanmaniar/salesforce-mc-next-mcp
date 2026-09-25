@@ -63,6 +63,20 @@ try {
     'sf_describe_object',
     'sf_rest_request',
     'sf_org_limits',
+    'sf_create_record',
+    'sf_get_record',
+    'sf_update_record',
+    'sf_delete_record',
+    'sf_bulk_create_records',
+    'sf_bulk_update_records',
+    'sf_bulk_delete_records',
+    'sf_composite',
+    'sf_create_custom_object',
+    'sf_create_custom_field',
+    'sf_delete_custom_field',
+    'sf_delete_custom_object',
+    'sf_list_custom_objects',
+    'sf_list_custom_fields',
   ]) {
     check(`tool registered: ${expected}`, names.includes(expected));
   }
@@ -141,6 +155,71 @@ try {
   });
   check('sf_rest_request DELETE blocked by default', restDelete.isError === true);
 
+  // --- record CRUD guards -------------------------------------------------
+  const delRecord = await client.callTool({
+    name: 'sf_delete_record',
+    arguments: { sobject: 'Account', id: '001000000000001AAA' },
+  });
+  check('sf_delete_record blocked by default', delRecord.isError === true);
+  check(
+    'sf_delete_record names the flag',
+    (delRecord.content?.[0]?.text ?? '').includes('MC_NEXT_ALLOW_DESTRUCTIVE')
+  );
+
+  const bulkDel = await client.callTool({
+    name: 'sf_bulk_delete_records',
+    arguments: { sobject: 'Account', ids: ['001000000000001AAA'] },
+  });
+  check('sf_bulk_delete_records blocked by default', bulkDel.isError === true);
+
+  const compositeDel = await client.callTool({
+    name: 'sf_composite',
+    arguments: {
+      compositeRequest: [{ method: 'DELETE', url: '/sobjects/Account/001', referenceId: 'd1' }],
+    },
+  });
+  check('sf_composite with DELETE blocked by default', compositeDel.isError === true);
+
+  // --- bulk update validation (no credentials needed) ---------------------
+  const bulkUpdNoId = await client.callTool({
+    name: 'sf_bulk_update_records',
+    arguments: { sobject: 'Account', records: [{ Name: 'No Id Here' }] },
+  });
+  check('sf_bulk_update_records requires Id', bulkUpdNoId.isError === true);
+  check(
+    'bulk update error mentions Id',
+    (bulkUpdNoId.content?.[0]?.text ?? '').includes('missing an "Id"')
+  );
+
+  // --- metadata guards ----------------------------------------------------
+  const createObj = await client.callTool({
+    name: 'sf_create_custom_object',
+    arguments: { label: 'Invoice' },
+  });
+  check('sf_create_custom_object blocked by default', createObj.isError === true);
+  check(
+    'metadata guard names the flag',
+    (createObj.content?.[0]?.text ?? '').includes('MC_NEXT_ALLOW_METADATA_CHANGES')
+  );
+
+  const createField = await client.callTool({
+    name: 'sf_create_custom_field',
+    arguments: { sobject: 'Account', name: 'Foo', label: 'Foo', type: 'Text' },
+  });
+  check('sf_create_custom_field blocked by default', createField.isError === true);
+
+  const delField = await client.callTool({
+    name: 'sf_delete_custom_field',
+    arguments: { fieldId: '00N000000000001AAA' },
+  });
+  check('sf_delete_custom_field blocked by default', delField.isError === true);
+
+  const delObj = await client.callTool({
+    name: 'sf_delete_custom_object',
+    arguments: { objectId: '01I000000000001AAA' },
+  });
+  check('sf_delete_custom_object blocked by default', delObj.isError === true);
+
   // --- non-JSON body handling --------------------------------------------
   const csv = await client.callTool({
     name: 'mcnext_describe_endpoint',
@@ -161,6 +240,92 @@ try {
   show('delete blocked by safety guard', del);
 
   await client.close();
+
+  // ------------------------------------------------------------------------
+  // Phase 2: with the safety flags ENABLED, verify validation logic that sits
+  // behind the guards. These still fail (no credentials), but they must fail
+  // with a *validation* error rather than a guard refusal.
+  // ------------------------------------------------------------------------
+  console.log('\n--- phase 2: flags enabled (validation paths) ---');
+
+  const transport2 = new StdioClientTransport({
+    command: 'node',
+    args: ['dist/index.js'],
+    env: {
+      ...process.env,
+      MC_NEXT_DEBUG: 'false',
+      MC_NEXT_ALLOW_DESTRUCTIVE: 'true',
+      MC_NEXT_ALLOW_METADATA_CHANGES: 'true',
+    },
+    stderr: 'pipe',
+  });
+  const client2 = new Client({ name: 'smoke-test-2', version: '1.0.0' });
+  await client2.connect(transport2);
+
+  const textOf = (r) => r.content?.find((c) => c.type === 'text')?.text ?? '';
+
+  const textNoLength = await client2.callTool({
+    name: 'sf_create_custom_field',
+    arguments: { sobject: 'Account', name: 'Foo', label: 'Foo', type: 'Text' },
+  });
+  check(
+    'Text field without length is rejected',
+    textOf(textNoLength).includes('requires a `length`')
+  );
+
+  const numericNoScale = await client2.callTool({
+    name: 'sf_create_custom_field',
+    arguments: { sobject: 'Account', name: 'Amt', label: 'Amt', type: 'Currency', precision: 18 },
+  });
+  check(
+    'Currency field without scale is rejected',
+    textOf(numericNoScale).includes('requires both `precision` and `scale`')
+  );
+
+  const picklistEmpty = await client2.callTool({
+    name: 'sf_create_custom_field',
+    arguments: { sobject: 'Account', name: 'Stage', label: 'Stage', type: 'Picklist' },
+  });
+  check(
+    'Picklist without values is rejected',
+    textOf(picklistEmpty).includes('requires a non-empty `picklistValues`')
+  );
+
+  const scaleTooBig = await client2.callTool({
+    name: 'sf_create_custom_field',
+    arguments: {
+      sobject: 'Account',
+      name: 'Amt',
+      label: 'Amt',
+      type: 'Number',
+      precision: 4,
+      scale: 9,
+    },
+  });
+  check(
+    'scale > precision is rejected',
+    textOf(scaleTooBig).includes('cannot exceed')
+  );
+
+  const badIds = await client2.callTool({
+    name: 'sf_bulk_delete_records',
+    arguments: { sobject: 'Account', ids: ['not-an-id'] },
+  });
+  check(
+    'invalid Salesforce Ids are rejected',
+    textOf(badIds).includes('not valid Salesforce Ids')
+  );
+
+  const guardNowOpen = await client2.callTool({
+    name: 'sf_delete_record',
+    arguments: { sobject: 'Account', id: '001000000000001AAA' },
+  });
+  check(
+    'with flag enabled, delete passes the guard and reaches the API',
+    !textOf(guardNowOpen).includes('MC_NEXT_ALLOW_DESTRUCTIVE')
+  );
+
+  await client2.close();
 
   console.log(`\n${failures === 0 ? '✔ smoke test complete — all assertions passed' : `✘ ${failures} assertion(s) failed`}`);
   process.exit(failures === 0 ? 0 : 1);
