@@ -17,6 +17,8 @@ import { McNextClient } from './client.js';
 import { loadCatalog } from './catalog.js';
 import { registerTools } from './tools.js';
 import { registerPlatformTools } from './platform.js';
+import { registerRecordTools } from './records.js';
+import { registerMetadataTools } from './metadata.js';
 
 const SERVER_NAME = 'mc-next-mcp-server';
 const SERVER_VERSION = '1.0.0';
@@ -53,6 +55,8 @@ async function main(): Promise<void> {
 
   registerTools(server, cfg, client);
   registerPlatformTools(server, cfg, tokens);
+  registerRecordTools(server, cfg, tokens);
+  registerMetadataTools(server, cfg, tokens);
 
   // --- Resources: expose the catalog and API metadata ----------------------
   server.registerResource(
@@ -103,6 +107,7 @@ async function main(): Promise<void> {
                 credentialsConfigured: missing.length === 0,
                 basesConfigured: unconfigured.length === 0,
                 allowDestructive: cfg.allowDestructive,
+                allowMetadataChanges: cfg.allowMetadataChanges,
               },
             },
             null,
