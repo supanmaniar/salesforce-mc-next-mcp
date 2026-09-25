@@ -225,7 +225,11 @@ function classify(method, path) {
   if (method === 'DELETE') return 'delete';
   if (method === 'PATCH' || method === 'PUT') return 'update';
   if (method === 'POST') {
-    if (/\/(publish|unpublish|clone|activate|deactivate|run|execute|start|stop|refresh|validate|preview|search|query|resolve|merge|upsert|deploy|retrieve|submit|cancel|schedule|trigger|send|test|generate|calculate|materialize|sync|import|export)\b/.test(p)) {
+    if (
+      /\/(publish|unpublish|clone|activate|deactivate|run|execute|start|stop|refresh|validate|preview|search|query|resolve|merge|upsert|deploy|retrieve|submit|cancel|schedule|trigger|send|test|generate|calculate|materialize|sync|import|export)\b/.test(
+        p
+      )
+    ) {
       return 'action';
     }
     if (p.includes('/exports')) return 'export';
@@ -272,18 +276,17 @@ function resolveBaseKey(hostTemplate, hostMap, fallback) {
 const endpoints = [];
 const usedIds = new Map();
 const familyStats = {};
+const missingCollections = [];
 
 for (const def of COLLECTIONS) {
   const inputPath = resolve(INPUT_DIR, def.file);
   if (!existsSync(inputPath)) {
     console.warn(`⚠ skipping missing collection: ${inputPath}`);
+    missingCollections.push(def.file);
     continue;
   }
 
   const collection = JSON.parse(readFileSync(inputPath, 'utf8'));
-  const collectionVars = Object.fromEntries(
-    (collection.variable ?? []).map((v) => [v.key, v.value ?? ''])
-  );
 
   let count = 0;
 
@@ -301,13 +304,11 @@ for (const def of COLLECTIONS) {
     const pathSegments = Array.isArray(url.path) ? url.path : [];
     const apiPath = '/' + pathSegments.join('/');
 
-    const hostTemplate = Array.isArray(url.host) ? url.host.join('') : url.host ?? '';
+    const hostTemplate = Array.isArray(url.host) ? url.host.join('') : (url.host ?? '');
     const baseKey = resolveBaseKey(hostTemplate, def.hostMap, def.baseKey);
 
     // Path params: segments beginning with ":" plus declared url.variable entries.
-    const declaredVars = new Map(
-      (url.variable ?? []).map((v) => [v.key, v.description ?? ''])
-    );
+    const declaredVars = new Map((url.variable ?? []).map((v) => [v.key, v.description ?? '']));
     const pathParams = [];
     for (const seg of pathSegments) {
       if (seg.startsWith(':')) {
@@ -417,8 +418,7 @@ for (const def of COLLECTIONS) {
     }
 
     const description =
-      String(req.description ?? '').trim() ||
-      `${method} ${apiPath} — ${group} / ${actionName}`;
+      String(req.description ?? '').trim() || `${method} ${apiPath} — ${group} / ${actionName}`;
 
     endpoints.push({
       id,
@@ -516,3 +516,37 @@ console.log(`  groups    : ${catalog.stats.groupCount}`);
 console.log(`  families  : ${JSON.stringify(catalog.stats.byFamily)}`);
 console.log(`  by method : ${JSON.stringify(catalog.stats.byMethod)}`);
 console.log(`  by kind   : ${JSON.stringify(catalog.stats.byKind)}`);
+
+// --- Guard: never let a degraded catalog pass silently --------------------
+// The source Postman collections are not in this repository (licensing), so a
+// fresh clone has no input to regenerate from. Without this guard the script
+// would happily overwrite the committed 445-endpoint catalog with an empty one
+// and exit 0, which is indistinguishable from success in CI.
+const EXPECTED_MIN_ENDPOINTS = 400;
+
+if (missingCollections.length) {
+  console.error(
+    `\n✘ ${missingCollections.length} of ${COLLECTIONS.length} source collection(s) were not found in ${INPUT_DIR}:`
+  );
+  for (const f of missingCollections) console.error(`    - ${f}`);
+  console.error(
+    '\nThese collections are deliberately not part of this repository (they are\n' +
+      "Salesforce's, and excluded for licensing). Pass the directory as the first\n" +
+      'argument, or see docs/POSTMAN-COLLECTIONS.md.\n' +
+      `\nThe catalog at ${OUTPUT} has been written with ${catalog.stats.endpointCount} ` +
+      'endpoints. Restore it with `git checkout -- catalog/endpoints.json`.'
+  );
+  process.exit(1);
+}
+
+if (catalog.stats.endpointCount < EXPECTED_MIN_ENDPOINTS) {
+  console.error(
+    `\n✘ Generated catalog has only ${catalog.stats.endpointCount} endpoints ` +
+      `(expected at least ${EXPECTED_MIN_ENDPOINTS}). Refusing to treat this as success.\n` +
+      'This usually means the source collections changed shape, or a parsing bug\n' +
+      'dropped endpoints. Review the diff before committing.'
+  );
+  process.exit(1);
+}
+
+console.log(`\n✔ ${catalog.stats.endpointCount} endpoints, ${catalog.stats.groupCount} groups`);

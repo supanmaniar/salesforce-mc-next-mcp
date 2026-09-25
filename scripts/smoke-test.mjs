@@ -228,10 +228,13 @@ try {
   check('CSV endpoint typed as text/csv', (csv.content?.[0]?.text ?? '').includes('text/csv'));
 
   // --- sample output ------------------------------------------------------
-  show('list_endpoints(family=mc-next, limit=3)', await client.callTool({
-    name: 'mcnext_list_endpoints',
-    arguments: { family: 'mc-next', limit: 3 },
-  }));
+  show(
+    'list_endpoints(family=mc-next, limit=3)',
+    await client.callTool({
+      name: 'mcnext_list_endpoints',
+      arguments: { family: 'mc-next', limit: 3 },
+    })
+  );
 
   show('describe_endpoint(content.create-an-email-with-html)', describe);
 
@@ -302,19 +305,13 @@ try {
       scale: 9,
     },
   });
-  check(
-    'scale > precision is rejected',
-    textOf(scaleTooBig).includes('cannot exceed')
-  );
+  check('scale > precision is rejected', textOf(scaleTooBig).includes('cannot exceed'));
 
   const badIds = await client2.callTool({
     name: 'sf_bulk_delete_records',
     arguments: { sobject: 'Account', ids: ['not-an-id'] },
   });
-  check(
-    'invalid Salesforce Ids are rejected',
-    textOf(badIds).includes('not valid Salesforce Ids')
-  );
+  check('invalid Salesforce Ids are rejected', textOf(badIds).includes('not valid Salesforce Ids'));
 
   const guardNowOpen = await client2.callTool({
     name: 'sf_delete_record',
@@ -327,7 +324,9 @@ try {
 
   await client2.close();
 
-  console.log(`\n${failures === 0 ? '✔ smoke test complete — all assertions passed' : `✘ ${failures} assertion(s) failed`}`);
+  console.log(
+    `\n${failures === 0 ? '✔ smoke test complete — all assertions passed' : `✘ ${failures} assertion(s) failed`}`
+  );
   process.exit(failures === 0 ? 0 : 1);
 } catch (err) {
   console.error('✘ smoke test failed:', err);

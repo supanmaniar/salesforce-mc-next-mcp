@@ -51,10 +51,13 @@ credentials**.
 | --- | --- |
 | `npm run generate` | Regenerate `catalog/endpoints.json` from the Postman collections |
 | `npm run build` | Compile TypeScript to `dist/` |
+| `npm run typecheck` | Type-check without emitting (`tsc --noEmit`) |
 | `npm run dev` | `tsc --watch` |
 | `npm run start` | Run the built server (`node dist/index.js`) |
 | `npm run smoke` | End-to-end MCP client test over `stdio` |
-| `node scripts/audit-catalog.mjs` | Fidelity checks on the generated catalog |
+| `npm run audit` | Fidelity checks on the generated catalog |
+| `npm run lint` / `lint:fix` | ESLint |
+| `npm run format` / `format:check` | Prettier |
 | `node scripts/inspect-raw.mjs <dir>` | Diagnose raw request bodies in the source collections |
 
 > **Never hand-edit `catalog/endpoints.json`.** It is generated. Edit the
@@ -109,7 +112,7 @@ Always run both, in this order:
 
 ```bash
 npm run generate
-node scripts/audit-catalog.mjs
+npm run audit
 npm run build && npm run smoke
 ```
 
@@ -178,10 +181,26 @@ rejected:
 3. Destructive operations are blocked **before** any network call is made.
 4. Credentials are never logged, and never written to stdout.
 
-### Type checking
+### Type checking, linting, and formatting
 
-`npm run build` must pass with no errors. There is no separate lint step; the
-compiler is the gate.
+All three gates must pass before a PR is ready:
+
+```bash
+npm run typecheck      # tsc --noEmit
+npm run lint           # ESLint (flat config, eslint.config.mjs)
+npm run format:check   # Prettier
+```
+
+Use `npm run lint:fix` and `npm run format` to apply fixes automatically.
+
+`tsconfig.json` has `strict: true`. ESLint additionally enforces `prefer-const`,
+`no-var`, and `eqeqeq`. Prettier is the single source of truth for formatting —
+do not hand-align code against it.
+
+> **A pre-commit hook runs `lint-staged`** on staged files (ESLint `--fix` +
+> Prettier). Husky installs it via the `prepare` script on `npm install`. To skip
+> it in an emergency, use `git commit --no-verify` — but CI will still enforce the
+> same checks, so skipping only defers the failure.
 
 ---
 
@@ -225,11 +244,15 @@ please open an issue first so the approach can be agreed on.
 
 ### Before you open one
 
-1. `npm run build` passes.
-2. `npm run smoke` passes.
-3. If you touched the generator, `node scripts/audit-catalog.mjs` passes and the
-   regenerated `catalog/endpoints.json` is included in the commit.
-4. Docs are updated (`README.md` and/or `CHANGELOG.md`).
+1. `npm run typecheck`, `npm run lint`, and `npm run format:check` pass.
+2. `npm run build` and `npm run smoke` pass.
+3. `npm run audit` passes.
+4. If you touched the generator, the regenerated `catalog/endpoints.json` is
+   included in the commit.
+5. Docs are updated (`README.md` and/or `CHANGELOG.md`).
+
+All of these run in CI on Node 18, 20, and 22. Running them locally first saves a
+round trip.
 
 ### Branch names
 

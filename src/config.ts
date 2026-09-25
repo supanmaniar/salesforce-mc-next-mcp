@@ -89,9 +89,7 @@ export function loadConfig(): McNextConfig {
   );
 
   // The platform tools need a plain instance URL (no /services/data/vXX suffix).
-  const instanceUrl = trimSlash(
-    env('SF_INSTANCE_URL') ?? originOf(mcNext) ?? ''
-  );
+  const instanceUrl = trimSlash(env('SF_INSTANCE_URL') ?? originOf(mcNext) ?? '');
 
   return {
     clientId: env('SF_CLIENT_ID') ?? '',

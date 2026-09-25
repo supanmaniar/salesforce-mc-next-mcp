@@ -66,7 +66,9 @@ export function registerPlatformTools(
         tooling: z
           .boolean()
           .optional()
-          .describe('Query the Tooling API instead of the data API (for metadata objects). Default false.'),
+          .describe(
+            'Query the Tooling API instead of the data API (for metadata objects). Default false.'
+          ),
       },
     },
     async ({ soql, tooling }) => {
@@ -93,7 +95,9 @@ export function registerPlatformTools(
       inputSchema: {
         nextRecordsUrl: z
           .string()
-          .describe('The nextRecordsUrl from a previous query, e.g. "/services/data/v66.0/query/01g...-2000".'),
+          .describe(
+            'The nextRecordsUrl from a previous query, e.g. "/services/data/v66.0/query/01g...-2000".'
+          ),
       },
     },
     async ({ nextRecordsUrl }) => {
@@ -113,11 +117,17 @@ export function registerPlatformTools(
     {
       title: 'List Salesforce objects',
       description:
-        'List the sObjects in the org (global describe). Returns each object\'s name, label, ' +
+        "List the sObjects in the org (global describe). Returns each object's name, label, " +
         'and key prefix. Use sf_describe_object for field-level detail.',
       inputSchema: {
-        tooling: z.boolean().optional().describe('List Tooling API objects instead. Default false.'),
-        search: z.string().optional().describe('Filter by name or label (case-insensitive substring).'),
+        tooling: z
+          .boolean()
+          .optional()
+          .describe('List Tooling API objects instead. Default false.'),
+        search: z
+          .string()
+          .optional()
+          .describe('Filter by name or label (case-insensitive substring).'),
       },
     },
     async ({ tooling, search }) => {
@@ -127,9 +137,7 @@ export function registerPlatformTools(
         const sobjects = (res.data as { sobjects?: Array<Record<string, unknown>> }).sobjects ?? [];
         const needle = search?.toLowerCase();
         const filtered = needle
-          ? sobjects.filter((o) =>
-              `${o.name} ${o.label}`.toLowerCase().includes(needle)
-            )
+          ? sobjects.filter((o) => `${o.name} ${o.label}`.toLowerCase().includes(needle))
           : sobjects;
         return ok({
           total: filtered.length,
@@ -162,11 +170,16 @@ export function registerPlatformTools(
         'or building a record payload.',
       inputSchema: {
         sobject: z.string().describe('API name of the object, e.g. "Account" or "My_Object__c".'),
-        tooling: z.boolean().optional().describe('Describe a Tooling API object instead. Default false.'),
+        tooling: z
+          .boolean()
+          .optional()
+          .describe('Describe a Tooling API object instead. Default false.'),
         includePicklists: z
           .boolean()
           .optional()
-          .describe('Include picklist values for picklist fields. Default false (keeps output small).'),
+          .describe(
+            'Include picklist values for picklist fields. Default false (keeps output small).'
+          ),
       },
     },
     async ({ sobject, tooling, includePicklists }) => {
@@ -225,7 +238,7 @@ export function registerPlatformTools(
     {
       title: 'Call any Salesforce REST endpoint',
       description:
-        'Generic REST explorer (like Salesforce Inspector\'s REST Explorer). Call any path under ' +
+        "Generic REST explorer (like Salesforce Inspector's REST Explorer). Call any path under " +
         '/services/data/vXX with any method. Paths may be relative (e.g. "/sobjects/Account/describe") ' +
         'or absolute (e.g. "/services/data/v66.0/limits"). Use this for endpoints not covered by the ' +
         'other tools.',
@@ -261,7 +274,7 @@ export function registerPlatformTools(
     {
       title: 'Get Salesforce org limits',
       description:
-        'Read the org\'s governor limits and current usage (/limits), including DailyApiRequests, ' +
+        "Read the org's governor limits and current usage (/limits), including DailyApiRequests, " +
         'DataStorageMB, and FileStorageMB. Useful for checking remaining API quota before bulk work.',
       inputSchema: {
         filter: z

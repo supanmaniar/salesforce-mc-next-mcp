@@ -21,6 +21,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/POSTMAN-COLLECTIONS.md` — catalog provenance, regeneration, validation, API-version upgrades, collection gaps
 - A "Quick Start" section in the README: a five-minute path that needs no credentials
   until step 5.
+- GitHub Actions CI (`.github/workflows/ci.yml`) with three jobs: quality gates on
+  Node 18/20/22 (format, lint, typecheck, build, smoke, catalog audit), a dependency
+  vulnerability audit, and a packaging check.
+- Code quality tooling: ESLint 9 flat config, Prettier, and a husky + lint-staged
+  pre-commit hook.
+- `npm run audit` and `npm run typecheck` scripts.
+- GitHub issue templates for bug reports, feature requests, and documentation.
+
+### Fixed
+
+- **`scripts/generate-catalog.mjs` no longer silently succeeds when the source
+  Postman collections are missing.** It previously wrote an empty catalog (0
+  endpoints) and exited `0`, which is indistinguishable from success in CI and
+  would overwrite the committed 445-endpoint catalog. It now fails with a clear
+  message and a non-zero exit code, and additionally refuses to accept a catalog
+  below 400 endpoints.
+- **`scripts/audit-catalog.mjs` no longer reports a clean bill of health for a
+  degenerate catalog.** It previously printed `✔ 0 issues found` and exited `0`
+  for an empty or truncated catalog. It now fails on fewer than 400 endpoints or
+  40 groups, fails if the destructive count drops below 63, and exits non-zero on
+  any HIGH-severity finding.
+- Removed an unused variable in the catalog generator flagged by the new linter.
 - `Dockerfile` (multi-stage, non-root) and `.dockerignore` for containerized runs.
 - `SECURITY.md` — threat model (including what is deliberately *not* protected),
   data-in-motion and at-rest handling, authentication and authorization model,

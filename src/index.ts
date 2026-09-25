@@ -85,8 +85,7 @@ async function main(): Promise<void> {
     'mcnext://overview',
     {
       title: 'Marketing Cloud Next / Data 360 API overview',
-      description:
-        'Authentication model, base URLs, API families, and endpoint statistics.',
+      description: 'Authentication model, base URLs, API families, and endpoint statistics.',
       mimeType: 'application/json',
     },
     async (uri) => ({
@@ -125,9 +124,7 @@ async function main(): Promise<void> {
       title: 'Explore the Marketing Cloud Next / Data 360 APIs',
       description: 'Guided workflow for discovering and calling Marketing Cloud Next endpoints.',
       argsSchema: {
-        goal: z
-          .string()
-          .describe('What you want to accomplish, e.g. "publish an email template".'),
+        goal: z.string().describe('What you want to accomplish, e.g. "publish an email template".'),
       },
     },
     ({ goal }) => ({
@@ -192,6 +189,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(`[${SERVER_NAME}] fatal:`, err instanceof Error ? err.stack ?? err.message : err);
+  console.error(`[${SERVER_NAME}] fatal:`, err instanceof Error ? (err.stack ?? err.message) : err);
   process.exit(1);
 });

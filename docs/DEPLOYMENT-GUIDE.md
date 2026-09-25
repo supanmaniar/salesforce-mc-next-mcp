@@ -54,7 +54,7 @@ npm run build
 | `npm run start` | Run the built server (`node dist/index.js`) |
 | `npm run smoke` | End-to-end MCP client test, **no credentials needed** |
 | `npm run generate` | Regenerate `catalog/endpoints.json` from Postman collections |
-| `node scripts/audit-catalog.mjs` | Fidelity checks on the catalog |
+| `npm run audit` | Fidelity checks on the catalog |
 
 ### Running it by hand
 

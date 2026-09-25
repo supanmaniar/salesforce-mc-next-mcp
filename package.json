@@ -20,10 +20,17 @@
   "scripts": {
     "generate": "node scripts/generate-catalog.mjs",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "smoke": "node scripts/smoke-test.mjs",
-    "prepublishOnly": "npm run generate && npm run build"
+    "audit": "node scripts/audit-catalog.mjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepublishOnly": "npm run generate && npm run build",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=18"
@@ -32,9 +39,25 @@
     "@modelcontextprotocol/sdk": "^1.12.0",
     "zod": "^3.23.8"
   },
+  "lint-staged": {
+    "*.{ts,mjs,js}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.2"
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
+    "prettier": "^3.9.9",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.70.1"
   },
   "keywords": [
     "mcp",

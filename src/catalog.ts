@@ -9,15 +9,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export type EndpointKind =
-  | 'query'
-  | 'read'
-  | 'create'
-  | 'update'
-  | 'delete'
-  | 'action'
-  | 'export'
-  | 'import'
-  | 'other';
+  'query' | 'read' | 'create' | 'update' | 'delete' | 'action' | 'export' | 'import' | 'other';
 
 export type BaseKey = 'mcNext' | 'data360' | 'data360Connect' | 'login';
 
@@ -187,5 +179,7 @@ export function summarize(e: Endpoint) {
 export function groupsFor(family?: string): string[] {
   const catalog = loadCatalog();
   if (!family) return catalog.groups;
-  return [...new Set(catalog.endpoints.filter((e) => e.family === family).map((e) => e.group))].sort();
+  return [
+    ...new Set(catalog.endpoints.filter((e) => e.family === family).map((e) => e.group)),
+  ].sort();
 }

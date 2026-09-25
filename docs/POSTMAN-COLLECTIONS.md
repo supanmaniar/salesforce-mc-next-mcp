@@ -94,6 +94,29 @@ node scripts/generate-catalog.mjs ~/salesforce-postman ./catalog/endpoints.json
 > the generator and regenerate, or your change will be silently overwritten on the
 > next run.
 
+### The generator refuses to produce a degraded catalog
+
+Because the source collections are not in this repository, `npm run generate` on a
+fresh clone has **no input**. Without a guard it would write an empty catalog and
+exit `0` — indistinguishable from success, and destructive to the committed
+catalog.
+
+`scripts/generate-catalog.mjs` therefore fails loudly in two cases:
+
+| Condition | Behaviour |
+| --- | --- |
+| One or more source collections missing | Lists the missing files, explains they are excluded for licensing, notes that the output was still written, and **exits `1`** |
+| Fewer than 400 endpoints generated | Refuses to treat it as success and **exits `1`** |
+
+If you trigger the first case, restore the committed catalog with:
+
+```bash
+git checkout -- catalog/endpoints.json
+```
+
+This guard is what makes it safe to run `npm run generate` in CI without risking
+an accidental commit of an empty catalog.
+
 ### The full regeneration workflow
 
 ```bash
@@ -101,7 +124,7 @@ node scripts/generate-catalog.mjs ~/salesforce-postman ./catalog/endpoints.json
 npm run generate
 
 # 2. Validate the result
-node scripts/audit-catalog.mjs
+npm run audit
 
 # 3. Rebuild and test
 npm run build && npm run smoke
@@ -117,12 +140,11 @@ Step 2 is not optional. Never commit a regenerated catalog that fails the audit.
 ## Validating the catalog
 
 ```bash
-node scripts/audit-catalog.mjs
+npm run audit
 ```
 
-> **Note:** there is **no `npm run audit` script.** Invoke the script directly, or
-> use `node scripts/audit-catalog.mjs`. (Adding an `audit` npm script would be a
-> welcome, trivial contribution.)
+> This is also available as `node scripts/audit-catalog.mjs` if you prefer to
+> invoke the script directly.
 
 ### What the audit checks
 
@@ -142,6 +164,20 @@ Nine fidelity checks, reported by severity:
 The `DELETE`-classification check is the most security-relevant: if a delete
 endpoint were classified as anything other than `delete`, it would not be flagged
 destructive and would bypass the gate.
+
+### The audit fails, not just reports
+
+Three conditions cause a non-zero exit:
+
+| Condition | Why |
+| --- | --- |
+| Fewer than **400 endpoints** | A truncated or empty catalog would otherwise report `✔ 0 issues found` — a clean bill of health for a broken artifact |
+| Fewer than **40 groups** | Same reason, at the grouping level |
+| Destructive count below **63** | The most dangerous regression: it would mean DELETE operations escaping the gate |
+| Any **HIGH**-severity finding | HIGH means a real fidelity problem, not noise |
+
+MED and LOW findings are reported but tolerated, so the known expected LOW does not
+block the build.
 
 ### Current output
 
@@ -279,7 +315,7 @@ expected names (see the table at the top), or the generator will not find them.
 
 ```bash
 npm run generate
-node scripts/audit-catalog.mjs
+npm run audit
 ```
 
 Read the audit output carefully. A new API version often introduces endpoints with
@@ -401,7 +437,7 @@ addressed with Salesforce, and can only be worked around.
 
 1. Edit `scripts/generate-catalog.mjs`.
 2. Regenerate: `npm run generate`.
-3. Validate: `node scripts/audit-catalog.mjs` — must pass.
+3. Validate: `npm run audit` — must pass.
 4. Build and test: `npm run build && npm run smoke`.
 5. Commit **both** the generator change and the regenerated catalog.
 
@@ -424,7 +460,7 @@ generated and would be overwritten. Options:
 
 Check, in order:
 
-- [ ] `node scripts/audit-catalog.mjs` passes with no new HIGH/MED findings
+- [ ] `npm run audit` passes with no new HIGH/MED findings
 - [ ] The destructive count did not drop unexpectedly
 - [ ] `byKind` did not shift in a way that suggests misclassification
 - [ ] If `classify` or `isDestructive` changed, the change is justified and tested

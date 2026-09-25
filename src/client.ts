@@ -128,7 +128,12 @@ export class McNextClient {
     for (;;) {
       attempt++;
       const token = await this.tokens.getToken();
-      const res = await this.send(method, url, { ...headers, Authorization: `Bearer ${token}` }, body);
+      const res = await this.send(
+        method,
+        url,
+        { ...headers, Authorization: `Bearer ${token}` },
+        body
+      );
 
       // 401 -> refresh token once and retry immediately.
       if (res.status === 401 && !reauthed) {
@@ -140,9 +145,10 @@ export class McNextClient {
 
       if (RETRYABLE_STATUS.has(res.status) && attempt <= this.cfg.maxRetries) {
         const retryAfter = Number(res.headers.get('retry-after'));
-        const backoff = Number.isFinite(retryAfter) && retryAfter > 0
-          ? retryAfter * 1000
-          : Math.min(2 ** attempt * 500, 15_000);
+        const backoff =
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? retryAfter * 1000
+            : Math.min(2 ** attempt * 500, 15_000);
         log(this.cfg, `HTTP ${res.status} — retrying in ${backoff}ms (attempt ${attempt})`);
         await sleep(backoff);
         continue;

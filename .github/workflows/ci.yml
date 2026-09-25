@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Quality gates. No credentials required — every step below runs on a fresh
+  # clone with nothing configured.
+  # ---------------------------------------------------------------------------
+  quality:
+    name: Quality (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 18 is the declared minimum (package.json engines); 22 is current LTS.
+        node: ['18', '20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Format check (Prettier)
+        run: npm run format:check
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      # Asserts the tool surface, both safety gates, and the validation paths.
+      # Needs no Salesforce credentials.
+      - name: Smoke test
+        run: npm run smoke
+
+      # Fidelity checks on the committed catalog, including a floor on the
+      # endpoint and destructive counts.
+      - name: Catalog audit
+        run: npm run audit
+
+      - name: Verify the built entrypoint exists
+        run: test -f dist/index.js
+
+  # ---------------------------------------------------------------------------
+  # Dependency vulnerabilities. Separate job so a security finding is visually
+  # distinct from a code-quality failure.
+  # ---------------------------------------------------------------------------
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fails on high/critical advisories in production dependencies.
+      - name: npm audit (production)
+        run: npm audit --omit=dev --audit-level=high
+
+      # Dev-only advisories are reported but do not fail the build, since they
+      # cannot affect the shipped artifact.
+      - name: npm audit (including dev, informational)
+        run: npm audit --audit-level=critical || true
+
+  # ---------------------------------------------------------------------------
+  # Verifies the server can actually be launched and spoken to over stdio, from
+  # the packaged artifact rather than the working tree.
+  # ---------------------------------------------------------------------------
+  package:
+    name: Package smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify the npm package contains what it should
+        run: |
+          npm pack --dry-run 2>&1 | tee /tmp/pack.txt
+          for expected in dist/ catalog/ docs/ README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md LICENSE; do
+            if ! grep -q "$expected" /tmp/pack.txt; then
+              echo "::error::npm package is missing: $expected"
+              exit 1
+            fi
+          done
+
+      - name: Verify the catalog declares the expected endpoint count
+        run: |
+          node -e "
+          const c = require('./catalog/endpoints.json');
+          if (c.endpoints.length !== 445) {
+            console.error('Expected 445 endpoints, found ' + c.endpoints.length);
+            process.exit(1);
+          }
+          console.log('Catalog OK: ' + c.endpoints.length + ' endpoints');
+          "

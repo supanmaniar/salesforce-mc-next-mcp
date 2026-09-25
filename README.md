@@ -408,11 +408,18 @@ the key **`servers`** and requires `"type": "stdio"` — see
 ## Development
 
 ```bash
-npm run generate   # regenerate catalog/endpoints.json from the Postman collections
-npm run build      # tsc -> dist/
-npm run dev        # tsc --watch
-npm run smoke      # end-to-end MCP client test (no credentials needed)
+npm run generate     # regenerate catalog/endpoints.json from the Postman collections
+npm run build        # tsc -> dist/
+npm run typecheck    # tsc --noEmit
+npm run dev          # tsc --watch
+npm run smoke        # end-to-end MCP client test (no credentials needed)
+npm run audit        # catalog fidelity checks
+npm run lint         # ESLint
+npm run format       # Prettier
 ```
+
+A pre-commit hook runs ESLint and Prettier on staged files. CI runs all of the
+above plus a dependency audit on Node 18, 20, and 22.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the catalog regeneration workflow, code
 standards, and the commit message format. For running the server in Docker, on

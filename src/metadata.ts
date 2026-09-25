@@ -118,11 +118,16 @@ export function registerMetadataTools(
         'Gated behind MC_NEXT_ALLOW_METADATA_CHANGES=true.',
       inputSchema: {
         label: z.string().describe('Singular label, e.g. "Invoice".'),
-        pluralLabel: z.string().optional().describe('Plural label, e.g. "Invoices". Defaults to label + "s".'),
+        pluralLabel: z
+          .string()
+          .optional()
+          .describe('Plural label, e.g. "Invoices". Defaults to label + "s".'),
         name: z
           .string()
           .optional()
-          .describe('API name without the __c suffix, e.g. "Invoice". Defaults to a slug of the label.'),
+          .describe(
+            'API name without the __c suffix, e.g. "Invoice". Defaults to a slug of the label.'
+          ),
         description: z.string().optional(),
         nameFieldLabel: z.string().optional().describe('Label for the auto-created Name field.'),
         nameFieldType: z
@@ -206,7 +211,7 @@ export function registerMetadataTools(
       title: 'Create a custom field',
       description:
         'Create a custom field on an object via the Tooling API ' +
-        '(POST /tooling/sobjects/CustomField), mirroring Inspector\'s Field Creator. ' +
+        "(POST /tooling/sobjects/CustomField), mirroring Inspector's Field Creator. " +
         'Optionally grants field-level security to profiles/permission sets. ' +
         'Gated behind MC_NEXT_ALLOW_METADATA_CHANGES=true.',
       inputSchema: {
@@ -218,17 +223,43 @@ export function registerMetadataTools(
         inlineHelpText: z.string().optional(),
         required: z.boolean().optional().describe('Mark the field required. Default false.'),
         unique: z.boolean().optional().describe('Mark the field unique. Default false.'),
-        externalId: z.boolean().optional().describe('Mark the field as an external id. Default false.'),
-        length: z.number().int().positive().optional().describe('Length for Text/LongTextArea/Html.'),
-        precision: z.number().int().positive().optional().describe('Total digits for numeric types.'),
-        scale: z.number().int().nonnegative().optional().describe('Decimal places for numeric types.'),
-        visibleLines: z.number().int().positive().optional().describe('Visible lines for long text areas.'),
+        externalId: z
+          .boolean()
+          .optional()
+          .describe('Mark the field as an external id. Default false.'),
+        length: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Length for Text/LongTextArea/Html.'),
+        precision: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Total digits for numeric types.'),
+        scale: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe('Decimal places for numeric types.'),
+        visibleLines: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Visible lines for long text areas.'),
         defaultValue: z.unknown().optional().describe('Default value (e.g. true for a Checkbox).'),
         picklistValues: z
           .array(z.string())
           .optional()
           .describe('Picklist values, required for Picklist/MultiselectPicklist.'),
-        sorted: z.boolean().optional().describe('Sort picklist values alphabetically. Default false.'),
+        sorted: z
+          .boolean()
+          .optional()
+          .describe('Sort picklist values alphabetically. Default false.'),
         firstValueDefault: z
           .boolean()
           .optional()
@@ -378,10 +409,12 @@ export function registerMetadataTools(
       title: 'Delete a custom field',
       description:
         'Delete a custom field via the Tooling API (DELETE /tooling/sobjects/CustomField/{id}). ' +
-        'Requires the field\'s Tooling API Id — find it with sf_list_custom_fields. ' +
+        "Requires the field's Tooling API Id — find it with sf_list_custom_fields. " +
         'Gated behind MC_NEXT_ALLOW_METADATA_CHANGES=true.',
       inputSchema: {
-        fieldId: z.string().describe('The Tooling API Id of the CustomField record (starts with 00N).'),
+        fieldId: z
+          .string()
+          .describe('The Tooling API Id of the CustomField record (starts with 00N).'),
       },
     },
     async ({ fieldId }) => {
@@ -409,10 +442,12 @@ export function registerMetadataTools(
       title: 'Delete a custom object',
       description:
         'Delete a custom object via the Tooling API (DELETE /tooling/sobjects/CustomObject/{id}). ' +
-        'Requires the object\'s Tooling API Id — find it with sf_list_custom_objects. ' +
+        "Requires the object's Tooling API Id — find it with sf_list_custom_objects. " +
         'This removes the object and its data. Gated behind MC_NEXT_ALLOW_METADATA_CHANGES=true.',
       inputSchema: {
-        objectId: z.string().describe('The Tooling API Id of the CustomObject record (starts with 01I).'),
+        objectId: z
+          .string()
+          .describe('The Tooling API Id of the CustomObject record (starts with 01I).'),
       },
     },
     async ({ objectId }) => {
@@ -442,8 +477,17 @@ export function registerMetadataTools(
         'List custom objects in the org with their Tooling API Ids (via a Tooling API SOQL query ' +
         'on CustomObject). Use the returned Id with sf_delete_custom_object.',
       inputSchema: {
-        search: z.string().optional().describe('Filter by DeveloperName (case-insensitive substring).'),
-        limit: z.number().int().positive().max(500).optional().describe('Max results. Default 200.'),
+        search: z
+          .string()
+          .optional()
+          .describe('Filter by DeveloperName (case-insensitive substring).'),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(500)
+          .optional()
+          .describe('Max results. Default 200.'),
       },
     },
     async ({ search, limit }) => {
@@ -456,7 +500,11 @@ export function registerMetadataTools(
         const records = (res.data as { records?: Array<Record<string, unknown>> }).records ?? [];
         const needle = search?.toLowerCase();
         const filtered = needle
-          ? records.filter((r) => String(r.DeveloperName ?? '').toLowerCase().includes(needle))
+          ? records.filter((r) =>
+              String(r.DeveloperName ?? '')
+                .toLowerCase()
+                .includes(needle)
+            )
           : records;
         const capped = filtered.slice(0, limit ?? 200);
         return ok({
@@ -490,8 +538,17 @@ export function registerMetadataTools(
           .string()
           .optional()
           .describe('Only fields on this object, e.g. "Account". Omit for all objects.'),
-        search: z.string().optional().describe('Filter by DeveloperName (case-insensitive substring).'),
-        limit: z.number().int().positive().max(1000).optional().describe('Max results. Default 200.'),
+        search: z
+          .string()
+          .optional()
+          .describe('Filter by DeveloperName (case-insensitive substring).'),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(1000)
+          .optional()
+          .describe('Max results. Default 200.'),
       },
     },
     async ({ sobject, search, limit }) => {
@@ -505,7 +562,11 @@ export function registerMetadataTools(
         const records = (res.data as { records?: Array<Record<string, unknown>> }).records ?? [];
         const needle = search?.toLowerCase();
         const filtered = needle
-          ? records.filter((r) => String(r.DeveloperName ?? '').toLowerCase().includes(needle))
+          ? records.filter((r) =>
+              String(r.DeveloperName ?? '')
+                .toLowerCase()
+                .includes(needle)
+            )
           : records;
         const capped = filtered.slice(0, limit ?? 200);
         return ok({

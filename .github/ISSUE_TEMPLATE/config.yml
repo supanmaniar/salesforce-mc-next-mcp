@@ -1,0 +1,17 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/supanmaniar/salesforce-mc-next-mcp/security/advisories/new
+    about: Please report security issues privately — do not open a public issue.
+  - name: Setup help (VS Code + Copilot)
+    url: https://github.com/supanmaniar/salesforce-mc-next-mcp/blob/main/docs/VS-CODE-SETUP.md
+    about: Step-by-step setup, verification prompts, and troubleshooting.
+  - name: Setup help (Claude Desktop)
+    url: https://github.com/supanmaniar/salesforce-mc-next-mcp/blob/main/docs/CLAUDE-DESKTOP-SETUP.md
+    about: Config file locations, logs, and troubleshooting.
+  - name: Authentication / Connected App problems
+    url: https://github.com/supanmaniar/salesforce-mc-next-mcp/blob/main/docs/SALESFORCE-CONNECTED-APP-GUIDE.md#troubleshooting
+    about: The most common auth failures and their fixes.
+  - name: Worked examples
+    url: https://github.com/supanmaniar/salesforce-mc-next-mcp/blob/main/docs/EXAMPLES.md
+    about: Real tool calls and error-handling patterns.

@@ -140,7 +140,10 @@ export function registerRecordTools(
           .array(z.string())
           .optional()
           .describe('Only return these field names, e.g. ["Id", "Name"]. Omit for all fields.'),
-        tooling: z.boolean().optional().describe('Read via the Tooling API instead. Default false.'),
+        tooling: z
+          .boolean()
+          .optional()
+          .describe('Read via the Tooling API instead. Default false.'),
       },
     },
     async ({ sobject, id, fields, tooling }) => {
@@ -172,7 +175,10 @@ export function registerRecordTools(
         sobject: sobjectName,
         id: recordId,
         fields: recordFields,
-        tooling: z.boolean().optional().describe('Update via the Tooling API instead. Default false.'),
+        tooling: z
+          .boolean()
+          .optional()
+          .describe('Update via the Tooling API instead. Default false.'),
       },
     },
     async ({ sobject, id, fields, tooling }) => {
@@ -210,7 +216,10 @@ export function registerRecordTools(
       inputSchema: {
         sobject: sobjectName,
         id: recordId,
-        tooling: z.boolean().optional().describe('Delete via the Tooling API instead. Default false.'),
+        tooling: z
+          .boolean()
+          .optional()
+          .describe('Delete via the Tooling API instead. Default false.'),
       },
     },
     async ({ sobject, id, tooling }) => {
@@ -303,7 +312,9 @@ export function registerRecordTools(
         records: z
           .array(z.record(z.unknown()))
           .min(1)
-          .describe('Array of field maps, each including "Id", e.g. [{ "Id": "001...", "Name": "A" }].'),
+          .describe(
+            'Array of field maps, each including "Id", e.g. [{ "Id": "001...", "Name": "A" }].'
+          ),
         allOrNone: z
           .boolean()
           .optional()
@@ -415,7 +426,7 @@ export function registerRecordTools(
     {
       title: 'Run a Salesforce Composite request',
       description:
-        'Execute up to 25 subrequests in one API call (POST /composite), like Inspector\'s ' +
+        "Execute up to 25 subrequests in one API call (POST /composite), like Inspector's " +
         'Composite usage. Subrequests can reference earlier results with "@{referenceId.field}". ' +
         'Useful for multi-step operations that must stay within one API call.',
       inputSchema: {
@@ -424,7 +435,9 @@ export function registerRecordTools(
             z.object({
               method: z.enum(['GET', 'POST', 'PATCH', 'PUT', 'DELETE']),
               url: z.string().describe('Path relative to /services/data/vXX.'),
-              referenceId: z.string().describe('Unique id used to reference this subrequest\'s result.'),
+              referenceId: z
+                .string()
+                .describe("Unique id used to reference this subrequest's result."),
               body: z.unknown().optional(),
             })
           )

@@ -144,20 +144,13 @@ const queryParams = z
   .optional()
   .describe('Query string parameters, e.g. { "pageSize": 50, "orderBy": "name" }.');
 
-const extraHeaders = z
-  .record(z.string())
-  .optional()
-  .describe('Additional request headers.');
+const extraHeaders = z.record(z.string()).optional().describe('Additional request headers.');
 
 /* -------------------------------------------------------------------------- */
 /* Registration                                                               */
 /* -------------------------------------------------------------------------- */
 
-export function registerTools(
-  server: McpServer,
-  cfg: McNextConfig,
-  client: McNextClient
-): void {
+export function registerTools(server: McpServer, cfg: McNextConfig, client: McNextClient): void {
   const catalog = loadCatalog();
   const familyKeys = catalog.api.families.map((f) => f.key);
 
@@ -186,16 +179,39 @@ export function registerTools(
           .optional()
           .describe('Resource group, e.g. "Content", "Activations", "Segments", "Query API V2".'),
         kind: z
-          .enum(['query', 'read', 'create', 'update', 'delete', 'action', 'export', 'import', 'other'])
+          .enum([
+            'query',
+            'read',
+            'create',
+            'update',
+            'delete',
+            'action',
+            'export',
+            'import',
+            'other',
+          ])
           .optional()
-          .describe('Endpoint kind. "query" = list, "read" = get one, "action" = non-CRUD operation.'),
+          .describe(
+            'Endpoint kind. "query" = list, "read" = get one, "action" = non-CRUD operation.'
+          ),
         method: z.enum(['GET', 'POST', 'PATCH', 'PUT', 'DELETE']).optional(),
-        search: z.string().optional().describe('Free-text search over id, name, path and description.'),
+        search: z
+          .string()
+          .optional()
+          .describe('Free-text search over id, name, path and description.'),
         includeDestructive: z
           .boolean()
           .optional()
-          .describe('Include destructive endpoints (DELETE, delete/remove/cancel actions). Default true.'),
-        limit: z.number().int().positive().max(500).optional().describe('Max results (default 50).'),
+          .describe(
+            'Include destructive endpoints (DELETE, delete/remove/cancel actions). Default true.'
+          ),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(500)
+          .optional()
+          .describe('Max results (default 50).'),
       },
     },
     async ({ family, group, kind, method, search, includeDestructive, limit }) => {
@@ -321,8 +337,7 @@ export function registerTools(
         'and filters such as pageSize, offset, orderBy, and family-specific filters.',
       inputSchema: { endpointId, query: queryParams, headers: extraHeaders },
     },
-    async ({ endpointId: id, query, headers }) =>
-      invoke(id, ['query'], { query, headers })
+    async ({ endpointId: id, query, headers }) => invoke(id, ['query'], { query, headers })
   );
 
   /* ---------------------------------------------------------------------- */
@@ -332,7 +347,8 @@ export function registerTools(
     'mcnext_read',
     {
       title: 'Read a Marketing Cloud Next / Data 360 record',
-      description: 'Fetch a single record by id or key (GET, kind "read"). Requires the path parameter.',
+      description:
+        'Fetch a single record by id or key (GET, kind "read"). Requires the path parameter.',
       inputSchema: { endpointId, pathParams, query: queryParams, headers: extraHeaders },
     },
     async ({ endpointId: id, pathParams: pp, query, headers }) =>
