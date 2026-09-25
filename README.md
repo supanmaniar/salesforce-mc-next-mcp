@@ -13,9 +13,9 @@ The endpoint catalog is generated from the official Salesforce Postman collectio
 | `data360-connect` — Data 360 Connect | 383 | Salesforce Data 360 Connect APIs |
 | **Total** | **445** across 44 groups | |
 
-Plus Salesforce platform tools: SOQL query, object list/describe, generic REST explorer, and org limits.
+Plus Salesforce platform tools: SOQL query, object list/describe, generic REST explorer, org limits, and full **record + object CRUD**.
 
-## Design: why 14 tools instead of 445
+## Design: why 28 tools instead of 445
 
 Exposing 445 individual MCP tools would bloat the model's context and hurt tool-selection accuracy. Instead the server exposes a small set of **generic, catalog-driven** tools. The model discovers endpoints, then invokes them:
 
@@ -48,6 +48,30 @@ mcnext_list_endpoints  ->  mcnext_describe_endpoint  ->  mcnext_query / read / c
 | `sf_describe_object` | Field-level metadata for an sObject |
 | `sf_rest_request` | Generic REST explorer for any `/services/data/...` path |
 | `sf_org_limits` | Org limits and current API usage |
+
+**Record CRUD** — ported from Inspector's Inspect page and batch patterns
+
+| Tool | Purpose |
+| --- | --- |
+| `sf_create_record` | Create one record (`POST /sobjects/{SObject}`) |
+| `sf_get_record` | Read one record by Id, optionally field-limited |
+| `sf_update_record` | Update one record (`PATCH`) |
+| `sf_delete_record` | Delete one record — gated |
+| `sf_bulk_create_records` | Create up to 200 records per call (`POST /composite/sobjects`) |
+| `sf_bulk_update_records` | Update up to 200 records per call (`PATCH /composite/sobjects`) |
+| `sf_bulk_delete_records` | Delete up to 200 records per call — gated |
+| `sf_composite` | Batched mixed subrequests (`POST /composite`, max 25) |
+
+**Object & field metadata CRUD** — ported from Inspector's Field Creator
+
+| Tool | Purpose |
+| --- | --- |
+| `sf_create_custom_object` | Create a custom object (Tooling API `CustomObject`) — gated |
+| `sf_create_custom_field` | Create a custom field, with optional field-level security — gated |
+| `sf_delete_custom_field` | Delete a custom field by Tooling Id — gated |
+| `sf_delete_custom_object` | Delete a custom object by Tooling Id — gated |
+| `sf_list_custom_objects` | List custom objects with their Tooling Ids |
+| `sf_list_custom_fields` | List custom fields with their Tooling Ids |
 
 ### Resources & prompts
 
@@ -88,6 +112,7 @@ Copy `.env.example` to `.env` and fill in your values. The server reads configur
 | `MC_NEXT_TIMEOUT_MS` | `60000` | Request timeout |
 | `MC_NEXT_MAX_RETRIES` | `3` | Retries for 429 / 5xx |
 | `MC_NEXT_ALLOW_DESTRUCTIVE` | `false` | Allow DELETE and destructive actions |
+| `MC_NEXT_ALLOW_METADATA_CHANGES` | `false` | Allow custom object/field creation and deletion |
 | `MC_NEXT_DEBUG` | `false` | Log HTTP requests to stderr |
 
 ## Authentication
@@ -105,13 +130,27 @@ Create a Connected App in Salesforce Setup with OAuth enabled, the client-creden
 
 ## Safety
 
-Destructive operations are **blocked by default**. This covers:
+There are **two independent gates**, because deleting a data row and changing org schema carry very different risk.
 
-- every `DELETE` endpoint (45 of them)
-- destructive actions such as delete, remove, purge, cancel, deactivate, revoke, unpublish
-- `DELETE` via `sf_rest_request`
+### `MC_NEXT_ALLOW_DESTRUCTIVE` (default `false`)
 
-Set `MC_NEXT_ALLOW_DESTRUCTIVE=true` to enable them.
+Blocks operations that destroy data:
+
+- every `DELETE` endpoint in the catalog (45 of them)
+- destructive catalog actions such as delete, remove, purge, cancel, deactivate, revoke, unpublish
+- `sf_delete_record`, `sf_bulk_delete_records`
+- `DELETE` via `sf_rest_request` or `sf_composite`
+
+### `MC_NEXT_ALLOW_METADATA_CHANGES` (default `false`)
+
+Blocks operations that change **org schema**:
+
+- `sf_create_custom_object`, `sf_delete_custom_object`
+- `sf_create_custom_field`, `sf_delete_custom_field`
+
+Metadata changes are gated separately because they are materially harder to reverse than a record delete — removing a custom field destroys its data, and removing an object destroys all of its records.
+
+Both flags must be set explicitly; neither is implied by the other.
 
 ## Use with an MCP client
 
