@@ -201,6 +201,11 @@ mcnext_list_endpoints  ->  mcnext_describe_endpoint  ->  mcnext_query / read / c
 | [Claude Desktop setup](docs/CLAUDE-DESKTOP-SETUP.md) | Config file locations, `mcpServers` format, logs, Claude Code CLI |
 | [Salesforce Connected App guide](docs/SALESFORCE-CONNECTED-APP-GUIDE.md) | Creating the Connected App, scope → capability mapping, secrets, rotation |
 | [Deployment guide](docs/DEPLOYMENT-GUIDE.md) | stdio model, Docker, env var management, multi-org, logging, monitoring |
+| [Security policy](SECURITY.md) | Threat model, what is and isn't protected, safety-gate gaps, disclosure |
+
+> **Not read-only by default.** The safety gates block the **63 destructive**
+> endpoints, but the other **382 — including 180 create/update/action
+> endpoints — are allowed**. See [SECURITY.md](SECURITY.md#-what-the-gates-do-not-do--read-this).
 
 ## Install
 
@@ -275,6 +280,13 @@ Blocks operations that change **org schema**:
 Metadata changes are gated separately because they are materially harder to reverse than a record delete — removing a custom field destroys its data, and removing an object destroys all of its records.
 
 Both flags must be set explicitly; neither is implied by the other.
+
+> **These gates do not make the server read-only.** They block the 63 destructive
+> endpoints and the tools listed above. The remaining 382 endpoints — including
+> 103 `create`, 45 `update`, and 32 `action` operations — are allowed by default.
+> `sf_rest_request` also permits arbitrary `POST`/`PATCH`/`PUT`; only `DELETE` is
+> gated. See [SECURITY.md](SECURITY.md#-what-the-gates-do-not-do--read-this) for
+> the full picture and the recommended posture per environment.
 
 ## Use with an MCP client
 

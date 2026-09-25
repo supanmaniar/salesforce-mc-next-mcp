@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/SALESFORCE-CONNECTED-APP-GUIDE.md` — Connected App creation and scope mapping
   - `docs/DEPLOYMENT-GUIDE.md` — stdio model, Docker, env management, multi-org, logging, monitoring
 - `Dockerfile` (multi-stage, non-root) and `.dockerignore` for containerized runs.
+- `SECURITY.md` — threat model (including what is deliberately *not* protected),
+  data-in-motion and at-rest handling, authentication and authorization model,
+  safety-gate coverage and gaps, secrets management, dependency surface, and the
+  responsible-disclosure process.
+- `LICENSE` — MIT license text.
+
+### Fixed
+
+- Documentation now states explicitly that the safety gates do **not** make the
+  server read-only. Of 445 endpoints, 63 are blocked and 382 are allowed by
+  default, including 180 non-destructive create/update/action operations. The
+  README previously described the gates without quantifying their coverage.
 
 ## [1.0.0] - 2026-09-25
 
