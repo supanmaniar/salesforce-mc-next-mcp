@@ -46,10 +46,9 @@ function respond(res: RestResult): ToolResponse {
 export function registerPlatformTools(
   server: McpServer,
   cfg: McNextConfig,
-  tokens: TokenManager
+  tokens: TokenManager,
+  client: SfRestClient
 ): void {
-  const client = new SfRestClient(cfg, tokens);
-
   /* ---------------------------------------------------------------------- */
   /* 1. sf_soql_query — run SOQL                                            */
   /* ---------------------------------------------------------------------- */

@@ -23,11 +23,12 @@ The endpoint catalog is generated from the official Salesforce Postman collectio
 **At a glance**
 
 - **445 API endpoints** across 3 families and 44 resource groups, driven by a generated catalog
-- **28 MCP tools** — 8 catalog-driven, 6 platform, 8 record CRUD, 6 metadata CRUD
+- **30 MCP tools** — 8 catalog-driven, 6 platform, 8 record CRUD, 6 metadata CRUD, 2 maintenance
 - **Two Salesforce hosts** — core org (Marketing Cloud Next + platform) and Data 360 tenant
 - **One OAuth token** — client credentials, shared across every family
 - **Two safety gates** — destructive operations and schema changes are off by default
 - **No credentials needed** to browse the catalog or run the smoke test
+- **Optional HTTP transport** — off by default; stdio is the default and the safer mode
 
 ## Quick Start
 
@@ -238,7 +239,7 @@ These Inspector features were left out because they depend on a browser session 
 - **stdio transport only.** No HTTP/SSE transport, so the server cannot be hosted as a shared remote service.
 - **No automated tests against a real org.** The smoke test asserts the tool surface, safety guards, and validation logic without credentials. End-to-end behaviour against a live Salesforce org is unverified.
 
-## Design: why 28 tools instead of 445
+## Design: why 30 tools instead of 445
 
 Exposing 445 individual MCP tools would bloat the model's context and hurt tool-selection accuracy. Instead the server exposes a small set of **generic, catalog-driven** tools. The model discovers endpoints, then invokes them:
 
@@ -296,6 +297,13 @@ mcnext_list_endpoints  ->  mcnext_describe_endpoint  ->  mcnext_query / read / c
 | `sf_list_custom_objects` | List custom objects with their Tooling Ids |
 | `sf_list_custom_fields` | List custom fields with their Tooling Ids |
 
+**Maintenance**
+
+| Tool | Purpose |
+| --- | --- |
+| `mcnext_cache` | Inspect, clear, or re-tune the response cache (`stats` / `clear` / `ttl` / `off`) |
+| `mcnext_poll_job` | Poll a long-running job to completion; read-only (`GET`) endpoints only |
+
 ### Resources & prompts
 
 - Resources: `mcnext://catalog` (full catalog), `mcnext://overview` (auth model, bases, stats)
@@ -313,6 +321,9 @@ mcnext_list_endpoints  ->  mcnext_describe_endpoint  ->  mcnext_query / read / c
 | [Architecture](docs/ARCHITECTURE.md) | Tool taxonomy, request flow, token caching, the two-host model |
 | [Examples](docs/EXAMPLES.md) | Worked tool calls and error-handling patterns |
 | [Postman collections](docs/POSTMAN-COLLECTIONS.md) | Catalog provenance, regeneration, validation |
+| [HTTP deployment](docs/HTTP-DEPLOYMENT.md) | Optional network transport, auth, and its identity limitation |
+| [Async operations](docs/ASYNC-OPERATIONS.md) | Polling long-running jobs with `mcnext_poll_job` |
+| [Performance](docs/PERFORMANCE.md) | Response caching, TTL tuning, reducing API consumption |
 | [Security policy](SECURITY.md) | Threat model, what is and isn't protected, safety-gate gaps, disclosure |
 | [Roadmap](ROADMAP.md) | What's planned near-, medium-, and long-term, and how to influence it |
 
@@ -406,6 +417,15 @@ Copy `.env.example` to `.env` and fill in your values. The server reads configur
 | `MC_NEXT_ALLOW_DESTRUCTIVE` | `false` | Allow DELETE and destructive actions |
 | `MC_NEXT_ALLOW_METADATA_CHANGES` | `false` | Allow custom object/field creation and deletion |
 | `MC_NEXT_DEBUG` | `false` | Log HTTP requests to stderr |
+| `MC_NEXT_CACHE_TTL_MS` | `30000` | Response cache TTL for GETs. `0` disables caching |
+| `MC_NEXT_CACHE_MAX_ENTRIES` | `500` | Max cached responses (LRU eviction) |
+| `MC_NEXT_POLL_INTERVAL_MS` | `2000` | Default delay between `mcnext_poll_job` polls |
+| `MC_NEXT_POLL_TIMEOUT_MS` | `120000` | Default polling time budget |
+| `MC_NEXT_HTTP_ENABLED` | `false` | Enable the HTTP transport (see [HTTP deployment](docs/HTTP-DEPLOYMENT.md)) |
+| `MC_NEXT_HTTP_PORT` | `3000` | HTTP listen port |
+| `MC_NEXT_HTTP_HOST` | `127.0.0.1` | HTTP bind host. Non-loopback **requires** an auth token |
+| `MC_NEXT_HTTP_AUTH_TOKEN` | *(unset)* | Bearer token. Required for any non-loopback bind |
+| `MC_NEXT_HTTP_ALLOWED_HOSTS` | *(unset)* | Comma-separated allowed `Host` values (DNS-rebinding protection) |
 
 ## Authentication
 

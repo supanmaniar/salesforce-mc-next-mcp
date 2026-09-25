@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Optional HTTP transport** (`MC_NEXT_HTTP_ENABLED`, off by default) using the
+  MCP SDK's Streamable HTTP transport with stateful in-memory sessions. Includes
+  bearer-token auth, a `/healthz` liveness route, and Host-header validation for
+  DNS-rebinding protection. See `docs/HTTP-DEPLOYMENT.md`.
+- **`mcnext_poll_job`** — polls a long-running Salesforce job to completion.
+  Refuses any non-`GET` endpoint, since a repeated write would multiply by the
+  poll count. Reports its full status history and does not guess terminal states,
+  because the catalog documents no status vocabulary. See `docs/ASYNC-OPERATIONS.md`.
+- **`mcnext_cache`** — inspect, clear, or re-tune the response cache at runtime.
+- **Response caching** for successful `GET` requests, shared across all tool
+  groups (`MC_NEXT_CACHE_TTL_MS`, default 30s; `MC_NEXT_CACHE_MAX_ENTRIES`,
+  default 500). Writes and error responses are never cached. See
+  `docs/PERFORMANCE.md`.
+- `docs/HTTP-DEPLOYMENT.md`, `docs/ASYNC-OPERATIONS.md`, and `docs/PERFORMANCE.md`.
+- New optional environment variables for caching, polling, and the HTTP
+  transport, all documented in `.env.example`.
+
+### Changed
+
+- The tool surface grew from 28 to **30** tools (the two maintenance tools).
+- `registerPlatformTools`, `registerRecordTools`, and `registerMetadataTools` now
+  accept a shared `SfRestClient` instead of each constructing its own. Previously
+  each tool group created a separate client, which meant a cache hit in one group
+  was invisible to the others.
+
+### Security
+
+- **The server refuses to start** if the HTTP transport is bound to a
+  non-loopback host without `MC_NEXT_HTTP_AUTH_TOKEN`, or if the token is shorter
+  than 16 characters. This is fatal rather than a warning, because the failure
+  mode is an unauthenticated API on a network.
+- `docs/HTTP-DEPLOYMENT.md` states explicitly that HTTP does not provide per-user
+  identity: every caller acts as the same Salesforce integration user.
+
+## [1.0.0] - 2026-09-25
+
+### Added
+
 - Setup and deployment documentation under `docs/`:
   - `docs/VS-CODE-SETUP.md` — VS Code + GitHub Copilot Chat setup
   - `docs/CLAUDE-DESKTOP-SETUP.md` — Claude Desktop setup (plus a Claude Code CLI appendix)

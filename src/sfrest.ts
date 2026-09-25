@@ -9,6 +9,7 @@
 import type { McNextConfig } from './config.js';
 import { log } from './config.js';
 import type { TokenManager } from './auth.js';
+import { ResponseCache, isCacheable, isCacheableStatus } from './cache.js';
 
 const MAX_TEXT_CHARS = 100_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -22,11 +23,15 @@ export interface RestResult {
   durationMs: number;
   url: string;
   method: string;
+  /** True when this result was served from the response cache. */
+  cached?: boolean;
 }
 
 export interface RestOptions {
   body?: unknown;
   headers?: Record<string, string>;
+  /** Skip the response cache for this call. */
+  bypassCache?: boolean;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -36,8 +41,22 @@ function sleep(ms: number): Promise<void> {
 export class SfRestClient {
   constructor(
     private readonly cfg: McNextConfig,
-    private readonly tokens: TokenManager
+    private readonly tokens: TokenManager,
+    /**
+     * Shared response cache. Optional so the class stays usable on its own, but
+     * in the server every tool group receives the same instance so that hits
+     * are shared across platform, record, and metadata tools.
+     */
+    readonly cache: ResponseCache<RestResult> = new ResponseCache<RestResult>(
+      cfg.cacheTtlMs,
+      cfg.cacheMaxEntries
+    )
   ) {}
+
+  /** Replace the cache's TTL at runtime (used by the mcnext_cache tool). */
+  setCacheTtl(ttlMs: number): void {
+    this.cache.setTtl(ttlMs);
+  }
 
   /** Instance URL, preferring the explicit config over the token response. */
   async instanceUrl(): Promise<string> {
@@ -71,6 +90,17 @@ export class SfRestClient {
     if (opts.body !== undefined && opts.body !== null) {
       body = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
       headers['Content-Type'] = 'application/json';
+    }
+
+    // Only GETs are cacheable. Writes are never stored: a write response is not
+    // reproducible from its URL.
+    const cacheKey = ResponseCache.key(method, url, headers);
+    if (isCacheable(method, opts)) {
+      const hit = this.cache.get(cacheKey);
+      if (hit) {
+        log(this.cfg, `[sfrest] cache HIT ${method} ${url}`);
+        return { ...hit, cached: true, durationMs: 0 };
+      }
     }
 
     const started = Date.now();
@@ -128,7 +158,7 @@ export class SfRestClient {
         }
       }
 
-      return {
+      const result: RestResult = {
         status: res.status,
         ok: res.ok,
         data,
@@ -138,6 +168,15 @@ export class SfRestClient {
         url,
         method,
       };
+
+      // Store only successful GETs. Errors are never cached, so a 403 caused by
+      // a missing scope does not keep looking broken after the scope is fixed.
+      if (isCacheable(method, opts) && isCacheableStatus(res.status)) {
+        this.cache.set(cacheKey, result);
+        log(this.cfg, `[sfrest] cache STORE ${method} ${url} (ttl=${this.cache.ttl}ms)`);
+      }
+
+      return result;
     }
   }
 }

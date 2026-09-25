@@ -16,6 +16,7 @@ import type { McNextConfig } from './config.js';
 import { log } from './config.js';
 import type { TokenManager } from './auth.js';
 import type { Endpoint } from './catalog.js';
+import { ResponseCache, isCacheable, isCacheableStatus } from './cache.js';
 
 export interface CallOptions {
   pathParams?: Record<string, string | number>;
@@ -25,6 +26,8 @@ export interface CallOptions {
   formData?: Record<string, string>;
   /** Extra headers merged over the endpoint defaults. */
   headers?: Record<string, string>;
+  /** Skip the response cache for this call. */
+  bypassCache?: boolean;
 }
 
 export interface CallResult {
@@ -39,6 +42,8 @@ export interface CallResult {
   durationMs: number;
   url: string;
   method: string;
+  /** True when this result was served from the response cache. */
+  cached?: boolean;
 }
 
 const MAX_TEXT_CHARS = 100_000;
@@ -52,10 +57,15 @@ function sleep(ms: number): Promise<void> {
 }
 
 export class McNextClient {
+  /** Shared response cache for idempotent GETs. */
+  readonly cache: ResponseCache<CallResult>;
+
   constructor(
     private readonly cfg: McNextConfig,
     private readonly tokens: TokenManager
-  ) {}
+  ) {
+    this.cache = new ResponseCache<CallResult>(cfg.cacheTtlMs, cfg.cacheMaxEntries);
+  }
 
   /** Resolve the base URL for an endpoint's family. */
   baseUrlFor(endpoint: Endpoint): string {
@@ -121,6 +131,18 @@ export class McNextClient {
     }
     Object.assign(headers, opts.headers ?? {});
 
+    // --- Response cache -----------------------------------------------------
+    // Only GETs are cacheable; writes are never stored. Errors are never stored
+    // either, so a fixed permission problem does not keep looking broken.
+    const cacheKey = ResponseCache.key(method, url, headers);
+    if (isCacheable(method, opts)) {
+      const hit = this.cache.get(cacheKey);
+      if (hit) {
+        log(this.cfg, `cache HIT ${method} ${url}`);
+        return { ...hit, cached: true, durationMs: 0 };
+      }
+    }
+
     let attempt = 0;
     let reauthed = false;
     const started = Date.now();
@@ -168,7 +190,7 @@ export class McNextClient {
         }
       }
 
-      return {
+      const result: CallResult = {
         status: res.status,
         ok: res.ok,
         contentType: contentTypeHeader,
@@ -179,6 +201,16 @@ export class McNextClient {
         url,
         method,
       };
+
+      // Store only successful GETs. Never cache errors: a 403 caused by a
+      // missing scope would otherwise keep looking like a 403 after the scope
+      // is fixed.
+      if (isCacheable(method, opts) && isCacheableStatus(res.status)) {
+        this.cache.set(cacheKey, result);
+        log(this.cfg, `cache STORE ${method} ${url} (ttl=${this.cache.ttl}ms)`);
+      }
+
+      return result;
     }
   }
 

@@ -89,10 +89,9 @@ function baseName(name: string): string {
 export function registerMetadataTools(
   server: McpServer,
   cfg: McNextConfig,
-  tokens: TokenManager
+  tokens: TokenManager,
+  client: SfRestClient
 ): void {
-  const client = new SfRestClient(cfg, tokens);
-
   /** Guard for every schema-changing tool. */
   function metadataGuard(action: string): ToolResponse | null {
     if (!cfg.allowMetadataChanges) {

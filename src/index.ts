@@ -1,49 +1,50 @@
 #!/usr/bin/env node
 /**
- * index.ts — MCP server entrypoint (stdio transport).
+ * index.ts — MCP server entrypoint.
+ *
+ * Transport is selected by configuration:
+ *   - stdio (default) — the server is launched by an MCP client
+ *   - HTTP (MC_NEXT_HTTP_ENABLED=true) — a network listener, with its own
+ *     security requirements. See docs/HTTP-DEPLOYMENT.md.
  *
  * Exposes:
  *   - Marketing Cloud Next, Data 360, and Data 360 Connect APIs (catalog-driven)
  *   - Salesforce platform tools (SOQL, describe, REST explorer, org limits)
+ *   - Record and metadata CRUD
+ *   - Cache control and async job polling
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-import { loadConfig, missingCredentials, unconfiguredBases, log } from './config.js';
+import {
+  loadConfig,
+  missingCredentials,
+  unconfiguredBases,
+  fatalConfigErrors,
+  log,
+} from './config.js';
 import { TokenManager } from './auth.js';
 import { McNextClient } from './client.js';
+import { SfRestClient } from './sfrest.js';
 import { loadCatalog } from './catalog.js';
 import { registerTools } from './tools.js';
 import { registerPlatformTools } from './platform.js';
 import { registerRecordTools } from './records.js';
 import { registerMetadataTools } from './metadata.js';
+import { registerMaintenanceTools } from './maintenance.js';
+import { startHttp } from './http.js';
 
 const SERVER_NAME = 'mc-next-mcp-server';
 const SERVER_VERSION = '1.0.0';
 
-async function main(): Promise<void> {
-  const cfg = loadConfig();
+/**
+ * Build a fully-configured McpServer. Called once for stdio, and once per
+ * session for HTTP.
+ */
+function buildServer(cfg: ReturnType<typeof loadConfig>): McpServer {
   const catalog = loadCatalog();
-
-  const missing = missingCredentials(cfg);
-  if (missing.length) {
-    // Warn but still start: the model can browse the catalog without credentials,
-    // and the error surfaces clearly on the first API call.
-    console.error(
-      `[${SERVER_NAME}] WARNING: missing required environment variable(s): ${missing.join(', ')}. ` +
-        'Catalog browsing will work, but API calls will fail until they are set.'
-    );
-  }
-
-  const unconfigured = unconfiguredBases(cfg);
-  if (unconfigured.length) {
-    console.error(
-      `[${SERVER_NAME}] WARNING: base URL(s) still at placeholder defaults: ${unconfigured.join(', ')}. ` +
-        'Set them to your org/tenant URLs before making API calls.'
-    );
-  }
 
   const server = new McpServer({
     name: SERVER_NAME,
@@ -52,11 +53,16 @@ async function main(): Promise<void> {
 
   const tokens = new TokenManager(cfg);
   const client = new McNextClient(cfg, tokens);
+  // One SfRestClient (and therefore one response cache) shared by every tool
+  // group, so a cache hit in the platform tools is visible to the record and
+  // metadata tools too.
+  const rest = new SfRestClient(cfg, tokens);
 
   registerTools(server, cfg, client);
-  registerPlatformTools(server, cfg, tokens);
-  registerRecordTools(server, cfg, tokens);
-  registerMetadataTools(server, cfg, tokens);
+  registerPlatformTools(server, cfg, tokens, rest);
+  registerRecordTools(server, cfg, tokens, rest);
+  registerMetadataTools(server, cfg, tokens, rest);
+  registerMaintenanceTools(server, cfg, client, rest);
 
   // --- Resources: expose the catalog and API metadata ----------------------
   server.registerResource(
@@ -103,10 +109,14 @@ async function main(): Promise<void> {
                 bases: cfg.bases,
                 instanceUrl: cfg.instanceUrl,
                 apiVersion: cfg.apiVersion,
-                credentialsConfigured: missing.length === 0,
-                basesConfigured: unconfigured.length === 0,
+                // Computed here rather than captured from main(), so this is
+                // correct per-session under the HTTP transport too.
+                credentialsConfigured: missingCredentials(cfg).length === 0,
+                basesConfigured: unconfiguredBases(cfg).length === 0,
                 allowDestructive: cfg.allowDestructive,
                 allowMetadataChanges: cfg.allowMetadataChanges,
+                cacheTtlMs: cfg.cacheTtlMs,
+                transport: cfg.http.enabled ? 'http' : 'stdio',
               },
             },
             null,
@@ -177,15 +187,68 @@ async function main(): Promise<void> {
     })
   );
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  return server;
+}
 
-  log(cfg, `${SERVER_NAME} v${SERVER_VERSION} running on stdio`);
+async function main(): Promise<void> {
+  const cfg = loadConfig();
+  const catalog = loadCatalog();
+
+  // Fatal misconfiguration must stop startup, not warn. Currently this catches
+  // HTTP bound to a non-loopback host without a bearer token.
+  const fatal = fatalConfigErrors(cfg);
+  if (fatal.length) {
+    for (const e of fatal) console.error(`[${SERVER_NAME}] FATAL: ${e}`);
+    process.exit(1);
+  }
+
+  const missing = missingCredentials(cfg);
+  if (missing.length) {
+    // Warn but still start: the model can browse the catalog without credentials,
+    // and the error surfaces clearly on the first API call.
+    console.error(
+      `[${SERVER_NAME}] WARNING: missing required environment variable(s): ${missing.join(', ')}. ` +
+        'Catalog browsing will work, but API calls will fail until they are set.'
+    );
+  }
+
+  const unconfigured = unconfiguredBases(cfg);
+  if (unconfigured.length) {
+    console.error(
+      `[${SERVER_NAME}] WARNING: base URL(s) still at placeholder defaults: ${unconfigured.join(', ')}. ` +
+        'Set them to your org/tenant URLs before making API calls.'
+    );
+  }
+
   log(
     cfg,
     `catalog: ${catalog.stats.endpointCount} endpoints / ${catalog.stats.groupCount} groups / ` +
       `${catalog.stats.familyCount} families`
   );
+  if (cfg.cacheTtlMs > 0) {
+    log(cfg, `response cache: ttl=${cfg.cacheTtlMs}ms maxEntries=${cfg.cacheMaxEntries}`);
+  } else {
+    log(cfg, 'response cache: disabled');
+  }
+
+  // --- Transport selection -------------------------------------------------
+  if (cfg.http.enabled) {
+    const handle = await startHttp(cfg, () => buildServer(cfg));
+
+    const shutdown = async () => {
+      log(cfg, 'shutting down HTTP transport');
+      await handle.close();
+      process.exit(0);
+    };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+    return;
+  }
+
+  const server = buildServer(cfg);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  log(cfg, `${SERVER_NAME} v${SERVER_VERSION} running on stdio`);
 }
 
 main().catch((err) => {

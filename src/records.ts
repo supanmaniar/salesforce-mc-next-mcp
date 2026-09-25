@@ -78,10 +78,9 @@ const recordFields = z
 export function registerRecordTools(
   server: McpServer,
   cfg: McNextConfig,
-  tokens: TokenManager
+  tokens: TokenManager,
+  client: SfRestClient
 ): void {
-  const client = new SfRestClient(cfg, tokens);
-
   /* ---------------------------------------------------------------------- */
   /* 1. sf_create_record                                                    */
   /* ---------------------------------------------------------------------- */

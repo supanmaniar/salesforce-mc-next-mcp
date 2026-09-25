@@ -77,6 +77,8 @@ try {
     'sf_delete_custom_object',
     'sf_list_custom_objects',
     'sf_list_custom_fields',
+    'mcnext_cache',
+    'mcnext_poll_job',
   ]) {
     check(`tool registered: ${expected}`, names.includes(expected));
   }
@@ -321,6 +323,50 @@ try {
     'with flag enabled, delete passes the guard and reaches the API',
     !textOf(guardNowOpen).includes('MC_NEXT_ALLOW_DESTRUCTIVE')
   );
+
+  // --- response cache -----------------------------------------------------
+  // Uses client2, which is still connected at this point.
+  const cacheStats = await client2.callTool({
+    name: 'mcnext_cache',
+    arguments: { action: 'stats' },
+  });
+  check('cache tool reports stats', textOf(cacheStats).includes('"enabled"'));
+  check('cache is on by default', textOf(cacheStats).includes('"enabled": true'));
+
+  const cacheOff = await client2.callTool({
+    name: 'mcnext_cache',
+    arguments: { action: 'ttl', ttlMs: 0 },
+  });
+  check('cache can be disabled', textOf(cacheOff).includes('"enabled": false'));
+
+  const cacheTtlMissing = await client2.callTool({
+    name: 'mcnext_cache',
+    arguments: { action: 'ttl' },
+  });
+  check('cache ttl without ttlMs is rejected', cacheTtlMissing.isError === true);
+
+  const cacheRestored = await client2.callTool({
+    name: 'mcnext_cache',
+    arguments: { action: 'ttl', ttlMs: 30000 },
+  });
+  check('cache can be re-enabled', textOf(cacheRestored).includes('"enabled": true'));
+
+  // --- async job polling --------------------------------------------------
+  const pollNonGet = await client2.callTool({
+    name: 'mcnext_poll_job',
+    arguments: { endpointId: 'ingestion-api.create-job' },
+  });
+  check('poll refuses a non-GET endpoint', pollNonGet.isError === true);
+  check(
+    'poll refusal explains it must be read-only',
+    textOf(pollNonGet).includes('must be read-only')
+  );
+
+  const pollUnknown = await client2.callTool({
+    name: 'mcnext_poll_job',
+    arguments: { endpointId: 'no.such-endpoint' },
+  });
+  check('poll rejects an unknown endpoint', pollUnknown.isError === true);
 
   await client2.close();
 

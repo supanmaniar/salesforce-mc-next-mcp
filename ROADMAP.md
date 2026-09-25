@@ -69,24 +69,26 @@ surface area.
 
 | Item | Status | Notes |
 | --- | --- | --- |
-| **HTTP/SSE transport option** | 🔴 | The single most requested capability class. Today the server is stdio-only, so it cannot be hosted as a shared remote service. This is a significant change: it needs a transport abstraction, and — more importantly — an answer for **per-user identity**, since all calls currently run as one Connected App integration user. Shipping HTTP without solving identity would mean every user of a shared deployment acts as the same Salesforce user. |
-| Per-request identity | 🔴 | Prerequisite for a safe shared deployment. Options include per-user OAuth tokens or header-based identity propagation. Needs design before implementation. |
+| ~~**HTTP/SSE transport option**~~ | ✅ | **Shipped** (opt-in, off by default). See [docs/HTTP-DEPLOYMENT.md](docs/HTTP-DEPLOYMENT.md). |
+| Per-request identity | 🔴 | **Still the blocker for shared deployments.** The HTTP transport works, but every caller runs as the same integration user, so a shared server gives everyone that user's access. Needs per-user OAuth or header-based identity propagation. |
 
 ### Reliability
 
 | Item | Status | Notes |
 | --- | --- | --- |
-| **Response caching** | 🟡 | Every call hits Salesforce. Repeated `sf_describe_object` calls each cost an API request. A short-TTL cache for describe/list operations would cut API consumption substantially. Needs a cache-invalidation story. |
-| Rate-limit awareness | 🟡 | The server retries 429s but does not budget the org's daily allowance. A pre-flight check against `sf_org_limits` and a request budget would prevent avoidable exhaustion. |
-| **Async job handling** | 🔴 | Some Data 360 operations are long-running. Today the caller polls manually. A job-submission + polling helper would make these usable. |
-| Pagination helper for catalog tools | 🟢 | Only SOQL has `sf_soql_query_more`. Catalog query tools return whatever the API returns; following `nextPageToken`-style cursors is currently the caller's job. |
+| ~~**Response caching**~~ | ✅ | **Shipped.** GET-only, 30s default TTL, LRU-bounded, controllable via `mcnext_cache`. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md). |
+| ~~**Async job handling**~~ | ✅ | **Shipped** as `mcnext_poll_job`. Deliberately does not guess terminal states, since the catalog documents no status vocabulary. See [docs/ASYNC-OPERATIONS.md](docs/ASYNC-OPERATIONS.md). |
+| Per-endpoint cache TTLs | 🟡 | One TTL covers both volatile data and stable metadata. |
+| In-flight request coalescing | 🟡 | Two concurrent identical cache misses both hit Salesforce. The token manager already de-duplicates; the HTTP clients do not. |
+| Rate-limit awareness | 🟡 | The server retries 429s but does not budget the org's daily allowance. |
+| Pagination helper for catalog tools | 🟢 | Only SOQL has `sf_soql_query_more`. |
 
 ### Correctness
 
 | Item | Status | Notes |
 | --- | --- | --- |
 | Catalog schema validation in CI | 🟡 | Depends on resolving `catalog.schema.json` first. |
-| Broader destructive classification review | 🟡 | 32 `action` endpoints are allowed by default. Some "non-destructive" actions have real side effects (triggering flows, publishing content). Worth auditing which should be gated. |
+| Broader destructive classification review | 🟡 | 32 `action` endpoints are allowed by default. Some have real side effects. |
 
 ---
 
