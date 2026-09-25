@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `publishConfig` (`access: public`).
 - `docker-compose.yml` and `docs/DOCKER-DEPLOYMENT.md`, including an explanation
   of why `docker compose up -d` cannot work for a stdio server.
+- `ROADMAP.md` covering near-, medium-, and long-term direction, with an explicit
+  "not planned" section.
+- README badges for CI status, release, license, Node version, MCP compatibility,
+  and endpoint count.
+- `.github/AWESOME-MCP-SERVERS-PR.md`, a staged submission for the
+  awesome-mcp-servers list (not part of the published package).
+- Expanded npm keywords from 9 to 18 terms, now in sync with the GitHub topics.
+  Added `mcp-server`, `ai-agent`, `llm-tool`, `claude`, `copilot`, `crm`,
+  `marketing-automation`, `data360`, and `data-360-connect`.
 
 ### Changed
 

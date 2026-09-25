@@ -31,6 +31,7 @@
     "CONTRIBUTING.md",
     "SECURITY.md",
     "LICENSE",
+    "ROADMAP.md",
     "Dockerfile",
     "docker-compose.yml",
     ".env.example"
@@ -79,14 +80,23 @@
   },
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
+    "ai-agent",
+    "llm-tool",
+    "claude",
+    "copilot",
     "salesforce",
     "marketing-cloud",
     "marketing-cloud-next",
+    "marketing-automation",
     "data-360",
+    "data360",
     "data-cloud",
+    "data-360-connect",
     "cms",
-    "soql"
+    "soql",
+    "crm"
   ],
   "license": "MIT"
 }

@@ -1,5 +1,21 @@
 # mc-next-mcp-server
 
+[![CI](https://img.shields.io/github/actions/workflow/status/supanmaniar/salesforce-mc-next-mcp/ci.yml?branch=main&label=CI)](https://github.com/supanmaniar/salesforce-mc-next-mcp/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/supanmaniar/salesforce-mc-next-mcp)](https://github.com/supanmaniar/salesforce-mc-next-mcp/releases)
+[![License](https://img.shields.io/github/license/supanmaniar/salesforce-mc-next-mcp)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](package.json)
+[![MCP](https://img.shields.io/badge/MCP-compatible-blue)](https://modelcontextprotocol.io)
+[![Endpoints](https://img.shields.io/badge/endpoints-445-blue)](catalog/endpoints.json)
+
+<!--
+Not yet published to npm, so the npm version/downloads badges are intentionally
+absent — shields.io renders "package not found" (red) for an unpublished package.
+Add these once `npm publish` has run:
+
+[![npm version](https://img.shields.io/npm/v/mc-next-mcp-server)](https://www.npmjs.com/package/mc-next-mcp-server)
+[![npm downloads](https://img.shields.io/npm/dm/mc-next-mcp-server)](https://www.npmjs.com/package/mc-next-mcp-server)
+-->
+
 An MCP (Model Context Protocol) server that exposes **Salesforce Marketing Cloud Next**, **Data 360**, and **Data 360 Connect** APIs, plus a set of **Salesforce platform tools** inspired by [Salesforce Inspector Reloaded](https://github.com/tprouvot/Salesforce-Inspector-reloaded).
 
 The endpoint catalog is generated from the official Salesforce Postman collections, so the tool surface stays in sync with the published API reference.
@@ -298,6 +314,7 @@ mcnext_list_endpoints  ->  mcnext_describe_endpoint  ->  mcnext_query / read / c
 | [Examples](docs/EXAMPLES.md) | Worked tool calls and error-handling patterns |
 | [Postman collections](docs/POSTMAN-COLLECTIONS.md) | Catalog provenance, regeneration, validation |
 | [Security policy](SECURITY.md) | Threat model, what is and isn't protected, safety-gate gaps, disclosure |
+| [Roadmap](ROADMAP.md) | What's planned near-, medium-, and long-term, and how to influence it |
 
 > **Not read-only by default.** The safety gates block the **63 destructive**
 > endpoints, but the other **382 — including 180 create/update/action
