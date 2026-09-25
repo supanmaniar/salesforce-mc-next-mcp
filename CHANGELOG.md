@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/CLAUDE-DESKTOP-SETUP.md` — Claude Desktop setup (plus a Claude Code CLI appendix)
   - `docs/SALESFORCE-CONNECTED-APP-GUIDE.md` — Connected App creation and scope mapping
   - `docs/DEPLOYMENT-GUIDE.md` — stdio model, Docker, env management, multi-org, logging, monitoring
+- Depth documentation under `docs/`:
+  - `docs/ARCHITECTURE.md` — tool taxonomy, request flow, token caching and re-auth,
+    the two-host model, why 28 tools instead of 445, module structure, catalog pipeline
+  - `docs/EXAMPLES.md` — worked examples with captured tool output, plus eight error-handling patterns
+  - `docs/POSTMAN-COLLECTIONS.md` — catalog provenance, regeneration, validation, API-version upgrades, collection gaps
+- A "Quick Start" section in the README: a five-minute path that needs no credentials
+  until step 5.
 - `Dockerfile` (multi-stage, non-root) and `.dockerignore` for containerized runs.
 - `SECURITY.md` — threat model (including what is deliberately *not* protected),
   data-in-motion and at-rest handling, authentication and authorization model,

@@ -13,6 +13,98 @@ The endpoint catalog is generated from the official Salesforce Postman collectio
 - **Two safety gates** — destructive operations and schema changes are off by default
 - **No credentials needed** to browse the catalog or run the smoke test
 
+## Quick Start
+
+Get the server running and verified in about five minutes. **No Salesforce org is
+required for steps 1–4** — the catalog tools work without credentials, so you can
+confirm the wiring before you set up authentication.
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/supanmaniar/salesforce-mc-next-mcp.git
+cd salesforce-mc-next-mcp
+npm install
+```
+
+### 2. Build
+
+```bash
+npm run build
+```
+
+### 3. Verify — no credentials needed
+
+```bash
+npm run smoke
+```
+
+This connects to the built server over stdio as a real MCP client and asserts the
+tool surface, both safety gates, and the validation paths. You should see
+`✔ smoke test complete — all assertions passed`.
+
+If this passes, the server is healthy and any remaining problem is configuration.
+
+### 4. Try it without credentials
+
+The server starts fine with no credentials — it warns on stderr and only fails
+when you make an API call. Point your MCP client at it and ask:
+
+```
+List the endpoints available for publishing an email.
+```
+
+```
+What API families and resource groups does the mc-next server cover?
+```
+
+### 5. Add credentials
+
+To make real API calls you need a Salesforce Connected App. Set these environment
+variables (in your MCP client's `env` block):
+
+```json
+{
+  "env": {
+    "SF_CLIENT_ID": "your_connected_app_consumer_key",
+    "SF_CLIENT_SECRET": "your_connected_app_consumer_secret",
+    "MC_NEXT_API_BASE_URL": "https://my-org.my.salesforce.com/services/data/v66.0",
+    "DATA360_TENANT_URL": "https://my-tenant.c360a.salesforce.com",
+    "DATA360_CONNECT_BASE_URL": "https://my-tenant.c360a.salesforce.com/services/data/v66.0"
+  }
+}
+```
+
+For a quick local test, a `.env` file works too:
+
+```bash
+cp .env.example .env
+# edit .env, then:
+node --env-file=.env dist/index.js
+```
+
+### 6. Wire up your client
+
+| Client | Guide |
+| --- | --- |
+| **VS Code + GitHub Copilot** | [docs/VS-CODE-SETUP.md](docs/VS-CODE-SETUP.md) |
+| **Claude Desktop** | [docs/CLAUDE-DESKTOP-SETUP.md](docs/CLAUDE-DESKTOP-SETUP.md) |
+| **Connected App creation** | [docs/SALESFORCE-CONNECTED-APP-GUIDE.md](docs/SALESFORCE-CONNECTED-APP-GUIDE.md) |
+
+> **Safety default:** destructive operations and schema changes are both **off**.
+> The gates block the 63 destructive endpoints, but the server is **not read-only**
+> — see [SECURITY.md](SECURITY.md#-what-the-gates-do-not-do--read-this).
+
+### Where to go next
+
+| I want to… | Read |
+| --- | --- |
+| Understand how the server is put together | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| See worked examples with real tool calls | [docs/EXAMPLES.md](docs/EXAMPLES.md) |
+| Understand or regenerate the catalog | [docs/POSTMAN-COLLECTIONS.md](docs/POSTMAN-COLLECTIONS.md) |
+| Deploy it (Docker, multi-org, monitoring) | [docs/DEPLOYMENT-GUIDE.md](docs/DEPLOYMENT-GUIDE.md) |
+| Review the security model | [SECURITY.md](SECURITY.md) |
+
 ## What it covers
 
 | API family | Endpoints | Source collection |
