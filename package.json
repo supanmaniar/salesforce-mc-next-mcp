@@ -1,0 +1,46 @@
+{
+  "name": "mc-next-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server exposing Salesforce Marketing Cloud Next, Data 360, and Data 360 Connect APIs, plus Salesforce platform tools (SOQL, describe, REST explorer, org limits). Catalogs generated from the official Postman collections.",
+  "type": "module",
+  "bin": {
+    "mc-next-mcp-server": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "catalog",
+    "README.md"
+  ],
+  "scripts": {
+    "generate": "node scripts/generate-catalog.mjs",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "smoke": "node scripts/smoke-test.mjs",
+    "prepublishOnly": "npm run generate && npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "salesforce",
+    "marketing-cloud",
+    "marketing-cloud-next",
+    "data-360",
+    "data-cloud",
+    "cms",
+    "soql"
+  ],
+  "license": "MIT"
+}
