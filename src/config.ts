@@ -33,6 +33,12 @@ export interface McNextConfig {
   timeoutMs: number;
   maxRetries: number;
   allowDestructive: boolean;
+  /**
+   * Gates schema-changing operations (creating/deleting custom objects and
+   * custom fields). Separate from `allowDestructive` because metadata changes
+   * are materially riskier than deleting a data row.
+   */
+  allowMetadataChanges: boolean;
   debug: boolean;
 }
 
@@ -102,6 +108,7 @@ export function loadConfig(): McNextConfig {
     timeoutMs: envInt('MC_NEXT_TIMEOUT_MS', 60_000),
     maxRetries: envInt('MC_NEXT_MAX_RETRIES', 3),
     allowDestructive: envBool('MC_NEXT_ALLOW_DESTRUCTIVE', false),
+    allowMetadataChanges: envBool('MC_NEXT_ALLOW_METADATA_CHANGES', false),
     debug: envBool('MC_NEXT_DEBUG', false),
   };
 }
