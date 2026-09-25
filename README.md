@@ -4,6 +4,15 @@ An MCP (Model Context Protocol) server that exposes **Salesforce Marketing Cloud
 
 The endpoint catalog is generated from the official Salesforce Postman collections, so the tool surface stays in sync with the published API reference.
 
+**At a glance**
+
+- **445 API endpoints** across 3 families and 44 resource groups, driven by a generated catalog
+- **28 MCP tools** — 8 catalog-driven, 6 platform, 8 record CRUD, 6 metadata CRUD
+- **Two Salesforce hosts** — core org (Marketing Cloud Next + platform) and Data 360 tenant
+- **One OAuth token** — client credentials, shared across every family
+- **Two safety gates** — destructive operations and schema changes are off by default
+- **No credentials needed** to browse the catalog or run the smoke test
+
 ## What it covers
 
 | API family | Endpoints | Source collection |
@@ -14,6 +23,112 @@ The endpoint catalog is generated from the official Salesforce Postman collectio
 | **Total** | **445** across 44 groups | |
 
 Plus Salesforce platform tools: SOQL query, object list/describe, generic REST explorer, org limits, and full **record + object CRUD**.
+
+## How it works across Salesforce products
+
+The server spans **two different Salesforce hosts**, which is the single most important thing to understand about it. Marketing Cloud Next lives on your **core org**; Data 360 lives on a **separate tenant host**.
+
+```
+                        ┌──────────────────────────────────────┐
+   one OAuth token ───► │  login.salesforce.com                │
+   shared by every      │  SF_LOGIN_URL                        │
+   API family           │  POST /services/oauth2/token         │
+                        └──────────────────────────────────────┘
+                                        │
+        ┌───────────────────────────────┴───────────────────────────────┐
+        │                                                               │
+        ▼                                                               ▼
+┌──────────────────────────┐                    ┌──────────────────────────────────┐
+│  CORE ORG HOST           │                    │  DATA 360 TENANT HOST            │
+│  my-org.my.salesforce.com│                    │  my-tenant.c360a.salesforce.com  │
+│                          │                    │                                  │
+│  MC_NEXT_API_BASE_URL    │                    │  DATA360_TENANT_URL              │
+│  SF_INSTANCE_URL         │                    │  DATA360_CONNECT_BASE_URL        │
+│                          │                    │                                  │
+│  ┌────────────────────┐  │                    │  ┌────────────────────────────┐  │
+│  │ mc-next       (27) │  │                    │  │ data360            (35)    │  │
+│  │ Content / CMS      │  │                    │  │ Query, Profile, Ingestion, │  │
+│  │                    │  │                    │  │ Metadata, Data Graphs      │  │
+│  ├────────────────────┤  │                    │  ├────────────────────────────┤  │
+│  │ sf_* platform      │  │                    │  │ data360-connect   (383)    │  │
+│  │ SOQL, describe,    │  │                    │  │ Activations, Segments,     │  │
+│  │ REST, limits       │  │                    │  │ Streams, Connections, ML,  │  │
+│  ├────────────────────┤  │                    │  │ Governance, Clean Rooms…   │  │
+│  │ sf_* record CRUD   │  │                    │  └────────────────────────────┘  │
+│  │ sf_* metadata CRUD │  │                    │                                  │
+│  └────────────────────┘  │                    │                                  │
+└──────────────────────────┘                    └──────────────────────────────────┘
+```
+
+The platform and CRUD tools only ever talk to the **core org host**. The catalog-driven `mcnext_*` tools pick their host per endpoint, based on the endpoint's `base` key.
+
+### Product-by-product coverage
+
+| Salesforce product | Host | Endpoints | What you can do |
+| --- | --- | --- | --- |
+| **Marketing Cloud Next** (Content / CMS) | Core org | 27 | Search content, manage workspaces, create/update/publish/clone emails and email templates |
+| **Data 360** — Query & Insights | Tenant | 8 | Query API V1 & V2, Query Unified Record ID, Calculated Insights |
+| **Data 360** — Profile, Ingestion, Metadata & Auth | Tenant | 27 | Profile API, Ingestion API (incl. CSV bulk upload), Metadata API, Data Graph API, Auth |
+| **Data 360 Connect** — Activation | Tenant | 59 | Activations, Activation Platforms/Targets, External Platforms, Data Actions |
+| **Data 360 Connect** — Data | Tenant | 99 | Data Streams, Data Lake/Model Objects, Data Spaces, Data Graphs, Data Transforms, Data Kits, Data Shares, Connections |
+| **Data 360 Connect** — Identity & Segments | Tenant | 32 | Identity Resolutions, Universal ID Lookup, Segments, Profile, Search Index, Insights |
+| **Data 360 Connect** — AI & Governance | Tenant | 164 | Machine Learning, Document AI, Notebook AI, Agent Configuration, Data Governance, Clean Rooms |
+| **Data 360 Connect** — Platform | Tenant | 29 | Metadata, Query (Current), Query V1 & V2, Auth, Limits, Private Network Routes, Connectors, Calculated Insights |
+| **Salesforce Platform** (any org) | Core org | n/a | SOQL, object describe, REST explorer, org limits, record CRUD, custom object/field CRUD |
+
+### How a request flows
+
+1. **Discover** — `mcnext_list_endpoints` filters the catalog by family/group/kind/search.
+2. **Describe** — `mcnext_describe_endpoint` returns the resolved base URL, path params, query params, and body schema.
+3. **Invoke** — the verb tool (`mcnext_query` / `read` / `create` / `update` / `delete` / `action`) resolves the endpoint's `base` key to the right host and sends the request.
+4. **Authenticate** — one cached OAuth token is shared by every family; a 401 triggers a single transparent re-auth and retry.
+
+The platform and CRUD tools bypass the catalog entirely and call `/services/data/vXX/...` directly on `SF_INSTANCE_URL`.
+
+## Limitations
+
+These are the honest boundaries of the current implementation.
+
+### Authentication
+
+- **Client credentials only.** The server uses the OAuth 2.0 client-credentials flow. There is no JWT bearer flow, no username/password flow, and no interactive/browser login. A Connected App with the client-credentials flow permitted is required.
+- **One identity for everything.** All calls run as the Connected App's integration user. There is no per-user or per-request impersonation, so Salesforce sharing rules and field-level security apply to that single user.
+- **One org per server instance.** The base URLs are fixed at startup from environment variables. Pointing at a second org or tenant requires a second server instance.
+- **No token persistence.** Tokens are cached in memory only and re-fetched on restart.
+
+### API surface
+
+- **Catalog-driven coverage only.** The 445 endpoints come from the three Postman collections. Anything not in those collections is reachable only through `sf_rest_request` (core org) — there is no equivalent generic passthrough for the Data 360 tenant hosts.
+- **No GraphQL.** The Salesforce GraphQL API is not covered.
+- **No SOAP.** The Partner/WSDL-based SOAP API is not covered. This matters for one specific case: Inspector's Data Import uses SOAP to set assignment rules, duplicate rules, and owner-change options on inserts. Those options are **not available** here.
+- **No Bulk API 2.0.** The `/jobs/ingest` and `/jobs/query` endpoints are not in the catalog. Bulk record work uses the Composite API instead, which caps at **200 records per call** — fine for hundreds of records, not for millions.
+- **No Metadata API deploy/retrieve.** There is no `package.xml` generation, no retrieve/deploy jobs, and no destructive-changes deployment. Custom object and field creation goes through the **Tooling API** instead, which is a different mechanism with different limits.
+- **No Tooling API passthrough for arbitrary metadata.** `sf_soql_query` and `sf_describe_object` accept a `tooling: true` flag, and the metadata CRUD tools use Tooling endpoints, but there is no general "call any Tooling endpoint" tool.
+- **No file uploads.** No endpoint in the catalog uses `multipart/form-data`, so the form-data code path is currently unexercised. The Ingestion API's CSV upload is sent as a raw `text/csv` body, not as a file part.
+
+### Features deliberately not ported
+
+These Inspector features were left out because they depend on a browser session or a UI, not because they were overlooked:
+
+| Inspector feature | Why it's absent |
+| --- | --- |
+| Data Export / Data Import UI | Browser UI over SOQL/SOAP; the underlying query and CRUD capability *is* available via `sf_soql_query` and the record CRUD tools |
+| Debug Logs viewer | Needs log streaming and a viewer; `sf_rest_request` can fetch `ApexLog` bodies but there is no filtering or analysis |
+| Event Monitor | Requires a long-lived CometD/streaming subscription, which does not fit a request/response MCP tool |
+| Flow Scanner / Object Scanner / Dependencies Explorer | Rule engines over metadata; would need the Metadata API and a rules port |
+| Field Creator UI | The *capability* is ported (`sf_create_custom_field`), minus the bulk-import spreadsheet UI |
+| Org Limits UI | Ported as `sf_org_limits` |
+| REST Explorer UI | Ported as `sf_rest_request` |
+
+### Operational
+
+- **No caching of API responses.** Every tool call hits Salesforce. Repeated `sf_describe_object` calls cost API requests.
+- **No rate-limit coordination.** Retries use exponential backoff on 429/5xx, but the server does not track or budget the org's daily API allowance. Check `sf_org_limits` before bulk work.
+- **No pagination helper for the catalog tools.** `mcnext_query` returns whatever the API returns; following `nextPageToken`-style cursors is the caller's responsibility. Only SOQL has a dedicated pagination tool (`sf_soql_query_more`).
+- **Asynchronous metadata changes.** `sf_create_custom_object` and `sf_create_custom_field` return as soon as the Tooling API accepts the request. The object or field may take seconds to become visible; re-check with `sf_list_objects` / `sf_describe_object`.
+- **No write confirmation or dry-run mode.** Tools execute immediately once the safety gates are open. There is no preview step.
+- **stdio transport only.** No HTTP/SSE transport, so the server cannot be hosted as a shared remote service.
+- **No automated tests against a real org.** The smoke test asserts the tool surface, safety guards, and validation logic without credentials. End-to-end behaviour against a live Salesforce org is unverified.
 
 ## Design: why 28 tools instead of 445
 
