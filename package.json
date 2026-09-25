@@ -7,6 +7,21 @@
     "mc-next-mcp-server": "dist/index.js"
   },
   "main": "dist/index.js",
+  "author": {
+    "name": "Supan Maniar",
+    "url": "https://github.com/supanmaniar"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/supanmaniar/salesforce-mc-next-mcp.git"
+  },
+  "homepage": "https://github.com/supanmaniar/salesforce-mc-next-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/supanmaniar/salesforce-mc-next-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist",
     "catalog",
@@ -15,7 +30,10 @@
     "CHANGELOG.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
-    "LICENSE"
+    "LICENSE",
+    "Dockerfile",
+    "docker-compose.yml",
+    ".env.example"
   ],
   "scripts": {
     "generate": "node scripts/generate-catalog.mjs",
@@ -29,7 +47,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepublishOnly": "npm run generate && npm run build",
+    "prepublishOnly": "npm run build && npm run audit",
     "prepare": "husky"
   },
   "engines": {

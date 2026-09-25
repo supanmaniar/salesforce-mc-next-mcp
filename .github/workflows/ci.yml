@@ -27,8 +27,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 18 is the declared minimum (package.json engines); 22 is current LTS.
-        node: ['18', '20', '22']
+        # 22 is the lowest version still receiving security patches; 24 is the
+        # active LTS. Node 18 (EOL 2025-03-27) and 20 (EOL 2026-03-24) were
+        # dropped from the matrix. The package still *runs* on Node >= 18 per
+        # `engines`, but CI tests supported runtimes.
+        node: ['22', '24']
 
     steps:
       - uses: actions/checkout@v7
@@ -79,7 +82,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
 
       - name: Install dependencies
@@ -107,7 +110,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
 
       - name: Install dependencies

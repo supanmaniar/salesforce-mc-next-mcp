@@ -28,6 +28,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pre-commit hook.
 - `npm run audit` and `npm run typecheck` scripts.
 - GitHub issue templates for bug reports, feature requests, and documentation.
+- npm publishing metadata: `author`, `repository`, `homepage`, `bugs`, and
+  `publishConfig` (`access: public`).
+- `docker-compose.yml` and `docs/DOCKER-DEPLOYMENT.md`, including an explanation
+  of why `docker compose up -d` cannot work for a stdio server.
+
+### Changed
+
+- The Dockerfile now defaults to `node:24-alpine` (active LTS) instead of
+  `node:22-alpine`, and accepts a `NODE_VERSION` build argument. It also sets the
+  documented configuration defaults as `ENV` so `docker inspect` shows the
+  effective config. Credentials are still never baked into the image.
+- The CI Node matrix is now `['22', '24']`. Node 18 reached end-of-life on
+  2025-03-27 and Node 20 on 2026-03-24, so testing them no longer provides a
+  meaningful compatibility signal. The package still declares `engines: >=18`.
+- `prepublishOnly` now runs `build && audit` instead of `generate && build`.
+  Regeneration requires the source Postman collections, which are not in this
+  repository, so the previous script would have failed on a clean checkout.
+
+### Fixed
+
+- `prepublishOnly` could not have succeeded on a clean checkout, because it
+  invoked `npm run generate`, which correctly refuses to run without the source
+  Postman collections. It now verifies the committed catalog instead.
 
 ### Fixed
 

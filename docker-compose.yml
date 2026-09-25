@@ -1,0 +1,78 @@
+# ---------------------------------------------------------------------------
+# docker-compose.yml — mc-next-mcp-server
+#
+# ⚠️  READ THIS FIRST
+#
+# This server uses **stdio** transport, not HTTP. It is not a long-running
+# network service. A client (VS Code, Claude Desktop, a CLI) must LAUNCH it and
+# attach to its stdin/stdout.
+#
+# That makes Compose a poor fit for the normal use case, and `up -d` actively
+# misleading:
+#
+#   - With no attached stdin, the server starts, reads EOF immediately, and
+#     exits. `docker compose up -d` will appear to succeed and then the
+#     container will stop. That is expected, not a bug to debug.
+#   - `restart: always` would create a crash-loop of a process that exits 0.
+#   - There is no port to publish, and no health endpoint to poll.
+#
+# This file therefore exists for two legitimate purposes only:
+#
+#   1. As a documented, inspectable reference for the image's configuration.
+#   2. As a base for `docker compose run` (see docs/DOCKER-DEPLOYMENT.md),
+#      which DOES attach a TTY/stdin and is the correct way to use it.
+#
+# For the actual client integration, configure your MCP client to run
+# `docker run --rm -i ...` — see docs/DOCKER-DEPLOYMENT.md.
+# ---------------------------------------------------------------------------
+
+services:
+  mc-next:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Override to pin a different Node major, e.g. NODE_VERSION=22-alpine.
+        # The default is the active LTS.
+        NODE_VERSION: 24-alpine
+
+    image: mc-next-mcp-server:1.0.0
+    container_name: mc-next-mcp-server
+
+    # Attach stdin and keep it open. Without this the server reads EOF and
+    # exits immediately.
+    stdin_open: true
+
+    # Loads SF_CLIENT_ID, SF_CLIENT_SECRET and the three base URLs.
+    # `.env` is gitignored. Copy .env.example to .env and fill it in.
+    env_file:
+      - .env
+
+    # Explicit defaults. These mirror src/config.ts and the Dockerfile ENV.
+    # The safety gates are pinned to "false" here on purpose — Compose files
+    # are easy to copy around, and silently enabling destructive operations in
+    # a copied config is exactly the failure mode the gates exist to prevent.
+    environment:
+      SF_LOGIN_URL: ${SF_LOGIN_URL:-https://login.salesforce.com}
+      SF_API_VERSION: ${SF_API_VERSION:-66.0}
+      MC_NEXT_TIMEOUT_MS: ${MC_NEXT_TIMEOUT_MS:-60000}
+      MC_NEXT_MAX_RETRIES: ${MC_NEXT_MAX_RETRIES:-3}
+      MC_NEXT_ALLOW_DESTRUCTIVE: 'false'
+      MC_NEXT_ALLOW_METADATA_CHANGES: 'false'
+      MC_NEXT_DEBUG: ${MC_NEXT_DEBUG:-false}
+
+    # NOT set, deliberately:
+    #
+    #   restart: always
+    #     The server exits cleanly when its client disconnects. Restarting it
+    #     would produce an endless loop of successful, pointless starts.
+    #
+    #   ports:
+    #     There is no listener. stdio only.
+    #
+    #   volumes:
+    #     The server reads only catalog/endpoints.json (baked into the image)
+    #     and writes nothing. There is no state to persist. If you want to
+    #     mount a different catalog, see docs/DOCKER-DEPLOYMENT.md.
+
+    # No ports, no volumes, no restart policy — all intentional.

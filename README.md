@@ -292,7 +292,11 @@ mcnext_list_endpoints  ->  mcnext_describe_endpoint  ->  mcnext_query / read / c
 | [VS Code + Copilot setup](docs/VS-CODE-SETUP.md) | Prerequisites, `mcp.json` format, verification prompts, troubleshooting |
 | [Claude Desktop setup](docs/CLAUDE-DESKTOP-SETUP.md) | Config file locations, `mcpServers` format, logs, Claude Code CLI |
 | [Salesforce Connected App guide](docs/SALESFORCE-CONNECTED-APP-GUIDE.md) | Creating the Connected App, scope → capability mapping, secrets, rotation |
-| [Deployment guide](docs/DEPLOYMENT-GUIDE.md) | stdio model, Docker, env var management, multi-org, logging, monitoring |
+| [Deployment guide](docs/DEPLOYMENT-GUIDE.md) | stdio model, env var management, multi-org, logging, monitoring |
+| [Docker deployment](docs/DOCKER-DEPLOYMENT.md) | Image build, client integration, why `compose up -d` does not work |
+| [Architecture](docs/ARCHITECTURE.md) | Tool taxonomy, request flow, token caching, the two-host model |
+| [Examples](docs/EXAMPLES.md) | Worked tool calls and error-handling patterns |
+| [Postman collections](docs/POSTMAN-COLLECTIONS.md) | Catalog provenance, regeneration, validation |
 | [Security policy](SECURITY.md) | Threat model, what is and isn't protected, safety-gate gaps, disclosure |
 
 > **Not read-only by default.** The safety gates block the **63 destructive**
@@ -301,13 +305,63 @@ mcnext_list_endpoints  ->  mcnext_describe_endpoint  ->  mcnext_query / read / c
 
 ## Install
 
+### From a git clone (recommended)
+
 ```bash
+git clone https://github.com/supanmaniar/salesforce-mc-next-mcp.git
+cd salesforce-mc-next-mcp
 npm install
-npm run generate   # Postman collections -> catalog/endpoints.json
 npm run build
 ```
 
-`catalog/endpoints.json` is committed, so `npm run generate` is optional unless you change the source collections.
+`catalog/endpoints.json` is committed, so `npm run generate` is optional — and it
+cannot run without the source Postman collections, which are not in this repo.
+
+### From npm
+
+```bash
+npm install -g mc-next-mcp-server
+```
+
+Or run it without installing:
+
+```bash
+npx mc-next-mcp-server
+```
+
+This installs the compiled `dist/` and the generated `catalog/`. You still need a
+Salesforce Connected App and the environment variables described in
+[Configure](#configure).
+
+> **Not yet published.** The package is prepared for publishing but has not been
+> released to the npm registry yet. Until then, use the git clone above. See
+> [Publishing](#publishing) for the maintainer checklist.
+
+### With Docker
+
+```bash
+docker build -t mc-next-mcp-server:1.0.0 .
+docker run --rm -i --env-file .env mc-next-mcp-server:1.0.0
+```
+
+The `-i` flag is required — the server is stdio-only. See
+[Docker deployment](docs/DOCKER-DEPLOYMENT.md).
+
+## Publishing
+
+Maintainers only. The `prepublishOnly` hook runs the build and the catalog audit
+before anything is uploaded, so a broken or truncated catalog cannot be published.
+
+```bash
+npm login                 # if not already authenticated
+npm run prepublishOnly    # build + audit — exactly what the hook runs
+npm pack --dry-run        # inspect the contents
+npm publish               # publishConfig sets access: public
+```
+
+`prepublishOnly` deliberately does **not** run `npm run generate`: regeneration
+requires the source Postman collections, which are not in this repository, so it
+would fail on a clean checkout.
 
 ## Configure
 

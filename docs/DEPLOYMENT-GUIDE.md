@@ -101,6 +101,11 @@ A `Dockerfile` is provided at the repository root. Docker is **not required** fo
 local use — it is for reproducibility and for machines where you want a
 hermetic build.
 
+> **Full Docker documentation lives in [DOCKER-DEPLOYMENT.md](DOCKER-DEPLOYMENT.md)** —
+> including client integration, `docker-compose.yml` usage, volume mounting, and
+> an explanation of why `docker compose up -d` cannot work for a stdio server.
+> The summary below is a quick reference.
+
 ### Build
 
 ```bash
