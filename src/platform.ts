@@ -10,13 +10,10 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { McNextConfig } from './config.js';
-import { log } from './config.js';
 import type { TokenManager } from './auth.js';
+import { SfRestClient, formatRest, type RestResult } from './sfrest.js';
 
 type ToolResponse = CallToolResult;
-
-const MAX_TEXT_CHARS = 100_000;
-const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 function ok(payload: unknown): ToolResponse {
   return {
@@ -33,162 +30,13 @@ function fail(message: string): ToolResponse {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-interface RestResult {
-  status: number;
-  ok: boolean;
-  data: unknown;
-  text: string;
-  truncated: boolean;
-  durationMs: number;
-  url: string;
-  method: string;
-}
-
-/**
- * Minimal Salesforce REST caller for the platform tools. Kept separate from the
- * catalog client because these calls are not catalog-driven: the caller supplies
- * a raw path.
- */
-class PlatformClient {
-  constructor(
-    private readonly cfg: McNextConfig,
-    private readonly tokens: TokenManager
-  ) {}
-
-  /** Instance URL, preferring the explicit config over the token response. */
-  private async instanceUrl(): Promise<string> {
-    if (this.cfg.instanceUrl && !this.cfg.instanceUrl.includes('YOUR_')) {
-      return this.cfg.instanceUrl;
-    }
-    const fromToken = this.tokens.instanceUrl;
-    if (fromToken) return fromToken.replace(/\/+$/, '');
-    throw new Error(
-      'No Salesforce instance URL available. Set SF_INSTANCE_URL (e.g. ' +
-        'https://my-org.my.salesforce.com) or ensure the OAuth token response includes instance_url.'
-    );
-  }
-
-  /** Build a URL for a path relative to /services/data/vXX. */
-  private async apiUrl(path: string): Promise<string> {
-    const base = await this.instanceUrl();
-    const version = this.cfg.apiVersion;
-    const clean = path.startsWith('/') ? path : `/${path}`;
-    // Allow callers to pass a fully-qualified path (e.g. /services/data/v66.0/...).
-    if (clean.startsWith('/services/')) return base + clean;
-    return `${base}/services/data/v${version}${clean}`;
-  }
-
-  async rest(
-    method: string,
-    path: string,
-    opts: { body?: unknown; headers?: Record<string, string> } = {}
-  ): Promise<RestResult> {
-    const url = await this.apiUrl(path);
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      ...(opts.headers ?? {}),
-    };
-    let body: string | undefined;
-    if (opts.body !== undefined && opts.body !== null) {
-      body = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
-      headers['Content-Type'] = 'application/json';
-    }
-
-    const started = Date.now();
-    let attempt = 0;
-    let reauthed = false;
-
-    for (;;) {
-      attempt++;
-      const token = await this.tokens.getToken();
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.cfg.timeoutMs);
-      log(this.cfg, `[platform] ${method} ${url}`);
-
-      let res: Response;
-      try {
-        res = await fetch(url, {
-          method,
-          headers: { ...headers, Authorization: `Bearer ${token}` },
-          body,
-          signal: controller.signal,
-        });
-      } catch (err) {
-        clearTimeout(timer);
-        const reason = err instanceof Error ? err.message : String(err);
-        throw new Error(`Request to ${method} ${url} failed: ${reason}`);
-      } finally {
-        clearTimeout(timer);
-      }
-
-      if (res.status === 401 && !reauthed) {
-        reauthed = true;
-        this.tokens.invalidate();
-        continue;
-      }
-
-      if (RETRYABLE_STATUS.has(res.status) && attempt <= this.cfg.maxRetries) {
-        const retryAfter = Number(res.headers.get('retry-after'));
-        const backoff =
-          Number.isFinite(retryAfter) && retryAfter > 0
-            ? retryAfter * 1000
-            : Math.min(2 ** attempt * 500, 15_000);
-        await sleep(backoff);
-        continue;
-      }
-
-      const text = await res.text();
-      const truncated = text.length > MAX_TEXT_CHARS;
-      const clipped = truncated ? text.slice(0, MAX_TEXT_CHARS) : text;
-      let data: unknown = null;
-      if (res.headers.get('content-type')?.includes('json') || /^\s*[[{]/.test(clipped)) {
-        try {
-          data = JSON.parse(clipped);
-        } catch {
-          data = null;
-        }
-      }
-
-      return {
-        status: res.status,
-        ok: res.ok,
-        data,
-        text: clipped,
-        truncated,
-        durationMs: Date.now() - started,
-        url,
-        method,
-      };
-    }
-  }
-}
-
-function formatRest(res: RestResult): ToolResponse {
-  const payload: Record<string, unknown> = {
-    request: `${res.method} ${res.url}`,
-    status: res.status,
-    ok: res.ok,
-    durationMs: res.durationMs,
+/** Wrap a REST result into a tool response. */
+function respond(res: RestResult): ToolResponse {
+  const { payload, isError } = formatRest(res);
+  return {
+    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    ...(isError ? { isError: true } : {}),
   };
-  if (res.data !== null) payload.data = res.data;
-  else if (res.text) payload.body = res.text;
-  if (res.truncated) payload.note = 'Response body was truncated for display.';
-  if (!res.ok) {
-    payload.hint =
-      res.status === 401
-        ? 'Unauthorized — verify SF_CLIENT_ID / SF_CLIENT_SECRET.'
-        : res.status === 403
-          ? 'Forbidden — the Connected App/user lacks access to this resource.'
-          : res.status === 400
-            ? 'Bad request — check the SOQL syntax or request body.'
-            : 'Request failed.';
-    return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }], isError: true };
-  }
-  return ok(payload);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -200,7 +48,7 @@ export function registerPlatformTools(
   cfg: McNextConfig,
   tokens: TokenManager
 ): void {
-  const client = new PlatformClient(cfg, tokens);
+  const client = new SfRestClient(cfg, tokens);
 
   /* ---------------------------------------------------------------------- */
   /* 1. sf_soql_query — run SOQL                                            */
@@ -226,7 +74,7 @@ export function registerPlatformTools(
         ? `/tooling/query/?q=${encodeURIComponent(soql)}`
         : `/query/?q=${encodeURIComponent(soql)}`;
       try {
-        return formatRest(await client.rest('GET', path));
+        return respond(await client.rest('GET', path));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
@@ -250,7 +98,7 @@ export function registerPlatformTools(
     },
     async ({ nextRecordsUrl }) => {
       try {
-        return formatRest(await client.rest('GET', nextRecordsUrl));
+        return respond(await client.rest('GET', nextRecordsUrl));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
@@ -275,7 +123,7 @@ export function registerPlatformTools(
     async ({ tooling, search }) => {
       try {
         const res = await client.rest('GET', tooling ? '/tooling/sobjects/' : '/sobjects/');
-        if (!res.ok || !res.data) return formatRest(res);
+        if (!res.ok || !res.data) return respond(res);
         const sobjects = (res.data as { sobjects?: Array<Record<string, unknown>> }).sobjects ?? [];
         const needle = search?.toLowerCase();
         const filtered = needle
@@ -291,6 +139,8 @@ export function registerPlatformTools(
             keyPrefix: o.keyPrefix ?? null,
             custom: o.custom ?? false,
             queryable: o.queryable ?? null,
+            createable: o.createable ?? null,
+            deletable: o.deletable ?? null,
           })),
         });
       } catch (err) {
@@ -323,11 +173,14 @@ export function registerPlatformTools(
       try {
         const prefix = tooling ? '/tooling/sobjects/' : '/sobjects/';
         const res = await client.rest('GET', `${prefix}${encodeURIComponent(sobject)}/describe/`);
-        if (!res.ok || !res.data) return formatRest(res);
+        if (!res.ok || !res.data) return respond(res);
 
         const d = res.data as {
           name?: string;
           label?: string;
+          createable?: boolean;
+          updateable?: boolean;
+          deletable?: boolean;
           fields?: Array<Record<string, unknown>>;
         };
         const fields = (d.fields ?? []).map((f) => {
@@ -352,6 +205,9 @@ export function registerPlatformTools(
         return ok({
           name: d.name,
           label: d.label,
+          createable: d.createable ?? null,
+          updateable: d.updateable ?? null,
+          deletable: d.deletable ?? null,
           fieldCount: fields.length,
           fields,
         });
@@ -390,7 +246,7 @@ export function registerPlatformTools(
         );
       }
       try {
-        return formatRest(await client.rest(method, path, { body, headers }));
+        return respond(await client.rest(method, path, { body, headers }));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
@@ -417,7 +273,7 @@ export function registerPlatformTools(
     async ({ filter }) => {
       try {
         const res = await client.rest('GET', '/limits');
-        if (!res.ok || !res.data) return formatRest(res);
+        if (!res.ok || !res.data) return respond(res);
         const all = res.data as Record<string, { Max?: number; Remaining?: number }>;
         const needle = filter?.toLowerCase();
         const entries = Object.entries(all)
