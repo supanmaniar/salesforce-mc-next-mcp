@@ -5,10 +5,37 @@
  * Salesforce login host used for OAuth and the platform (SOQL/REST) tools.
  */
 
+/**
+ * How the server obtains its Salesforce access token.
+ *
+ * - `oauth_client_credentials` (default) — a Connected App / External Client
+ *   App, using the OAuth 2.0 client-credentials grant. The server acts as that
+ *   app's integration user, so its blast radius is bounded by that user's
+ *   profile, permission sets, and the scopes granted to the app.
+ * - `cli_session` — reuses the access token already stored by the Salesforce
+ *   CLI (`sf org login web`). Zero setup, but the server then acts as **you**,
+ *   with your full privileges, and its activity is not separately attributable
+ *   in Setup. Intended for local, single-developer use only.
+ *
+ * The distinction is about privilege, not convenience. See docs/AUTH-MODES.md.
+ */
+export type AuthMode = 'oauth_client_credentials' | 'cli_session';
+
 export interface McNextConfig {
-  /** OAuth 2.0 client credentials (Connected App). */
+  /** Which credential source to use. See {@link AuthMode}. */
+  authMode: AuthMode;
+
+  /**
+   * Required in `oauth_client_credentials` mode; ignored in `cli_session` mode.
+   */
   clientId: string;
   clientSecret: string;
+
+  /**
+   * Salesforce CLI target-org (username or alias) whose stored session is
+   * reused in `cli_session` mode. Ignored otherwise.
+   */
+  sfCliOrg: string;
 
   /** Salesforce login host — used for the OAuth token endpoint. */
   loginUrl: string;
@@ -116,8 +143,30 @@ function originOf(url: string): string {
   }
 }
 
+/**
+ * Parse `SF_AUTH_MODE`. Accepts the canonical names plus a few forgiving
+ * aliases, and returns `undefined` for anything unrecognised so the caller can
+ * fail loudly rather than silently falling back to the wrong privilege level.
+ */
+export function parseAuthMode(raw: string | undefined): AuthMode | undefined {
+  if (!raw) return 'oauth_client_credentials';
+  const v = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, '_');
+  if (['oauth_client_credentials', 'oauth', 'client_credentials', 'connected_app'].includes(v)) {
+    return 'oauth_client_credentials';
+  }
+  if (['cli_session', 'cli', 'sf_cli', 'sfdx', 'session'].includes(v)) {
+    return 'cli_session';
+  }
+  return undefined;
+}
+
 export function loadConfig(): McNextConfig {
   const loginUrl = trimSlash(env('SF_LOGIN_URL') ?? 'https://login.salesforce.com');
+  const authModeRaw = env('SF_AUTH_MODE');
+  const authMode = parseAuthMode(authModeRaw) ?? 'oauth_client_credentials';
 
   const mcNext = trimSlash(
     env('MC_NEXT_API_BASE_URL') ?? 'https://YOUR_INSTANCE.my.salesforce.com/services/data/v66.0'
@@ -136,8 +185,10 @@ export function loadConfig(): McNextConfig {
   const httpHost = env('MC_NEXT_HTTP_HOST') ?? '127.0.0.1';
 
   return {
+    authMode,
     clientId: env('SF_CLIENT_ID') ?? '',
     clientSecret: env('SF_CLIENT_SECRET') ?? '',
+    sfCliOrg: env('SF_CLI_ORG') ?? env('SF_TARGET_ORG') ?? '',
     loginUrl,
     bases: {
       mcNext,
@@ -180,13 +231,33 @@ export function isLoopbackHost(host: string): boolean {
 /**
  * Configuration problems that must prevent startup rather than merely warn.
  *
- * Currently one case: HTTP transport bound to a non-loopback host without a
- * bearer token. That combination would expose every tool — including the
- * destructive ones — to anyone who can reach the port, running as the
- * Connected App's integration user. Refusing to start is the only safe default.
+ * Three cases, all of which would either expose the org broadly or silently run
+ * at the wrong privilege level:
+ *
+ * 1. HTTP bound to a non-loopback host without a bearer token — would expose
+ *    every tool to anyone who can reach the port.
+ * 2. A bearer token shorter than 16 characters — trivially brute-forced.
+ * 3. **`cli_session` mode combined with the HTTP transport.** In CLI mode the
+ *    server acts as whoever ran `sf org login`, inheriting their full
+ *    privileges with no scoping and no separate audit identity. Over HTTP,
+ *    every network caller would therefore operate as that person. This is the
+ *    single most dangerous combination the server can be put into, so it is
+ *    refused outright rather than warned about.
  */
 export function fatalConfigErrors(cfg: McNextConfig): string[] {
   const errors: string[] = [];
+
+  // Reject an unparseable SF_AUTH_MODE rather than defaulting silently: a typo
+  // must not decide which identity the server runs as.
+  const rawMode = env('SF_AUTH_MODE');
+  if (rawMode && !parseAuthMode(rawMode)) {
+    errors.push(
+      `SF_AUTH_MODE is "${rawMode}", which is not a recognised value. ` +
+        'Use "oauth_client_credentials" (default) or "cli_session". ' +
+        'See docs/AUTH-MODES.md.'
+    );
+  }
+
   if (cfg.http.enabled && !isLoopbackHost(cfg.http.host) && !cfg.http.authToken) {
     errors.push(
       `MC_NEXT_HTTP_HOST is "${cfg.http.host}" (not loopback) but MC_NEXT_HTTP_AUTH_TOKEN is not set. ` +
@@ -201,12 +272,25 @@ export function fatalConfigErrors(cfg: McNextConfig): string[] {
         '(e.g. `openssl rand -hex 32`).'
     );
   }
+  if (cfg.http.enabled && cfg.authMode === 'cli_session') {
+    errors.push(
+      'SF_AUTH_MODE=cli_session cannot be combined with MC_NEXT_HTTP_ENABLED=true. ' +
+        "CLI session mode runs as the user who ran `sf org login`, with that user's full privileges " +
+        'and no separate audit identity. Over HTTP that would let every network caller act as them. ' +
+        'Use SF_AUTH_MODE=oauth_client_credentials for the HTTP transport, or keep cli_session ' +
+        'on stdio. See docs/AUTH-MODES.md.'
+    );
+  }
+
   return errors;
 }
 
 /** Names of required env vars that are missing (empty array == fully configured). */
 export function missingCredentials(cfg: McNextConfig): string[] {
   const missing: string[] = [];
+  // In CLI mode the credentials come from the CLI's stored session, so the
+  // Connected App variables are neither required nor meaningful.
+  if (cfg.authMode === 'cli_session') return missing;
   if (!cfg.clientId) missing.push('SF_CLIENT_ID');
   if (!cfg.clientSecret) missing.push('SF_CLIENT_SECRET');
   return missing;

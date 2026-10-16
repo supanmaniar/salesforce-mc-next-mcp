@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`SF_AUTH_MODE` - two interchangeable authentication modes.**
+  `oauth_client_credentials` (default) keeps the existing Connected App
+  behaviour. `cli_session` reuses the access token already stored by the
+  Salesforce CLI, so no Connected App is needed for local development. The mode
+  is explicit, and an unrecognised value is a fatal startup error rather than a
+  silent fallback - a typo must not decide which identity the server runs as.
+  New variables: `SF_AUTH_MODE`, `SF_CLI_ORG` (also reads `SF_TARGET_ORG`).
+  See `docs/AUTH-MODES.md`.
+- **`docs/AUTH-MODES.md`** - the privilege trade-off between the two modes, a
+  side-by-side comparison, guidance on which to pick, and notes for anyone
+  adding a third mode.
+- The `mcnext://overview` resource now reports `authMode` and
+  `authenticatedAs`, resolved from the live token, so the effective identity is
+  visible rather than implied.
+- 14 new smoke-test assertions covering both modes and their refusals
+  (87 total, up from 73).
+
+- **Verification section in the README** recording what has been independently
+  checked — build gates, catalog fidelity against the source Postman
+  collections, protocol surface, live behaviour over mock transport, the safety
+  gates — and stating plainly that no live Marketing Cloud Next or Data 360
+  tenant call has yet been made.
+
 - **Optional HTTP transport** (`MC_NEXT_HTTP_ENABLED`, off by default) using the
   MCP SDK's Streamable HTTP transport with stateful in-memory sessions. Includes
   bearer-token auth, a `/healthz` liveness route, and Host-header validation for
@@ -28,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `missingCredentials()` no longer requires `SF_CLIENT_ID` / `SF_CLIENT_SECRET`
+  when `SF_AUTH_MODE=cli_session`, since the credentials come from the CLI.
+- `.env.example` restructured around the two modes, with the security
+  implications stated inline.
+
 - The tool surface grew from 28 to **30** tools (the two maintenance tools).
 - `registerPlatformTools`, `registerRecordTools`, and `registerMetadataTools` now
   accept a shared `SfRestClient` instead of each constructing its own. Previously
@@ -35,6 +63,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was invisible to the others.
 
 ### Security
+
+- **`SF_AUTH_MODE=cli_session` combined with `MC_NEXT_HTTP_ENABLED=true` is now a
+  fatal startup error.** CLI session mode runs as the user who ran
+  `sf org login`, with that user's full privileges and no separate audit
+  identity. Over the HTTP transport every network caller would act as them, so
+  the combination is refused rather than warned about.
+- **`cli_session` prints a startup notice** on every run, naming the org it will
+  act as, because it is easy to enable for a quick test and then forget.
+- In `cli_session` mode, the documented `401`-refresh path now genuinely
+  re-reads the CLI instead of returning the same cached token, which would have
+  made the retry loop.
+
+- Bumped `@modelcontextprotocol/sdk` from `^1.12.0` to `^1.32.1`, clearing
+  [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) (high
+  severity: an OAuth client could send credentials to an authorization server
+  chosen by the MCP server). `npm audit` on a clean clone now reports
+  **0 vulnerabilities**.
+- Re-verified after the bump: build, typecheck, lint, and all smoke-test
+  assertions pass, and live transport behaviour (token acquisition, 401 refresh
+  and retry) is unchanged.
 
 - **The server refuses to start** if the HTTP transport is bound to a
   non-loopback host without `MC_NEXT_HTTP_AUTH_TOKEN`, or if the token is shorter

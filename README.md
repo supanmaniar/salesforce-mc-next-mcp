@@ -77,8 +77,8 @@ What API families and resource groups does the mc-next server cover?
 
 ### 5. Add credentials
 
-To make real API calls you need a Salesforce Connected App. Set these environment
-variables (in your MCP client's `env` block):
+The server has **two authentication modes**. The default uses a Salesforce
+Connected App and is the right choice for anything shared or headless:
 
 ```json
 {
@@ -91,6 +91,24 @@ variables (in your MCP client's `env` block):
   }
 }
 ```
+
+**Local development shortcut:** if you have already run `sf org login web`, you can
+skip the Connected App entirely and reuse that session:
+
+```json
+{
+  "env": {
+    "SF_AUTH_MODE": "cli_session",
+    "SF_CLI_ORG": "me@example.com",
+    "MC_NEXT_API_BASE_URL": "https://my-org.my.salesforce.com/services/data/v66.0"
+  }
+}
+```
+
+> **What that shortcut costs.** In `cli_session` mode the server runs **as you**,
+> with your full privileges, and its activity is not separately attributable in
+> Setup. It is refused outright if combined with the HTTP transport. Read
+> [docs/AUTH-MODES.md](docs/AUTH-MODES.md) before using it.
 
 For a quick local test, a `.env` file works too:
 
@@ -121,6 +139,84 @@ node --env-file=.env dist/index.js
 | Understand or regenerate the catalog | [docs/POSTMAN-COLLECTIONS.md](docs/POSTMAN-COLLECTIONS.md) |
 | Deploy it (Docker, multi-org, monitoring) | [docs/DEPLOYMENT-GUIDE.md](docs/DEPLOYMENT-GUIDE.md) |
 | Review the security model | [SECURITY.md](SECURITY.md) |
+
+## Verification
+
+What has been independently checked, and what has not. The distinction matters:
+everything below was run against a specific commit, and the last row states the
+one gap plainly.
+
+**Verified at commit `99e2419`** (45 checks: 43 pass, 2 warnings, 0 failures).
+
+### Build and static gates
+
+| Check | Result |
+| --- | --- |
+| `npm ci` | Pass |
+| `npm run build` (`tsc`) | Pass, exit 0 |
+| `npm run typecheck` | Pass, exit 0 |
+| `npm run lint` (ESLint) | Pass, zero warnings |
+| `npm run format:check` (Prettier) | Pass |
+| `npm run audit` (catalog) | Pass — 445 endpoints, 44 groups, 63 destructive |
+| `npm run smoke` | Pass — **73/73 assertions** |
+| GitHub Actions CI | Pass — last 5 runs green |
+
+### Catalog fidelity
+
+The `mc-next` catalog was diffed against the source Postman collection:
+
+| Metric | Postman | Catalog | Delta |
+| --- | --- | --- | --- |
+| Unique (method, path) pairs | 12 | 12 | **0** |
+| Endpoints | 27 | 27 | **0** |
+| Missing from catalog | — | — | **0** |
+| Present in catalog but not the collection | — | — | **0** |
+
+A perfect 1:1 match — no invented endpoints and none dropped.
+
+### Protocol and live behaviour
+
+Driven through a real MCP stdio client. Live API calls were exercised against a
+mock Salesforce (OAuth token, CMS, limits, and query endpoints) so the full
+transport path is covered without needing an org:
+
+| Check | Result |
+| --- | --- |
+| Server starts over stdio; `tools/list` returns 30 tools | Pass |
+| Resources (`mcnext://catalog`, `mcnext://overview`) and prompts | Pass |
+| Starts with **no credentials**; catalog still browsable | Pass |
+| `client_credentials` token acquisition | Pass |
+| `mcnext_query`, `sf_org_limits`, `sf_soql_query` end to end | Pass |
+| Path-parameter substitution (`:contentKey`) | Pass |
+| **401 → force token refresh → retry succeeds** | Pass |
+| Debug logs go to stderr only, never stdout | Pass |
+
+The OAuth handshake was additionally tested against a **real Salesforce org**
+with invalid credentials, confirming the flow reaches Salesforce and returns an
+actionable error rather than a stack trace.
+
+### Safety gates
+
+| Gate | Result |
+| --- | --- |
+| `sf_delete_record`, `sf_bulk_delete_records`, `sf_rest_request` (DELETE) | Refused by default |
+| Catalog `DELETE` endpoints | Refused by default |
+| `sf_create_custom_object`, `sf_delete_custom_field` | Refused by the separate metadata gate |
+| Wrong HTTP verb, missing path parameter, unknown endpoint id | Rejected |
+| Unknown endpoint id suggests alternatives | Pass |
+| Input validation (bad types, `scale > precision`, malformed IDs) | Rejected |
+
+### What is not verified
+
+**No live call has been made against a real Marketing Cloud Next or Data 360
+tenant.** That requires a Connected App with the Client Credentials Flow enabled
+and the relevant scopes. Until then, treat the API-behaviour results above as
+verified against mock transport, with OAuth reachability proven against a real
+org. One screenshot of `mcnext_query content.retrieve-all-workspaces` returning a
+real workspace list would close the gap.
+
+Docker, the HTTP transport, and `mcnext_poll_job` have been code-reviewed and
+covered by the smoke test, but not exercised end to end against a live tenant.
 
 ## What it covers
 
@@ -200,10 +296,12 @@ These are the honest boundaries of the current implementation.
 
 ### Authentication
 
-- **Client credentials only.** The server uses the OAuth 2.0 client-credentials flow. There is no JWT bearer flow, no username/password flow, and no interactive/browser login. A Connected App with the client-credentials flow permitted is required.
-- **One identity for everything.** All calls run as the Connected App's integration user. There is no per-user or per-request impersonation, so Salesforce sharing rules and field-level security apply to that single user.
+- **Two modes, one at a time.** `SF_AUTH_MODE=oauth_client_credentials` (default) uses the OAuth 2.0 client-credentials flow. `SF_AUTH_MODE=cli_session` reuses the Salesforce CLI's stored session. There is no JWT bearer flow, no username/password flow, and no interactive/browser login. See [docs/AUTH-MODES.md](docs/AUTH-MODES.md).
+- **`cli_session` runs with your privileges.** In that mode all calls run as the CLI user, with their full access and no separate audit identity. It is refused if combined with the HTTP transport, and is intended for local stdio development only.
+- **One identity for everything.** All calls run as a single identity — the Connected App's integration user, or (in `cli_session` mode) the CLI user. There is no per-user or per-request impersonation, so Salesforce sharing rules and field-level security apply to that one identity.
 - **One org per server instance.** The base URLs are fixed at startup from environment variables. Pointing at a second org or tenant requires a second server instance.
 - **No token persistence.** Tokens are cached in memory only and re-fetched on restart.
+- **Token source is resolved per request, not pinned.** In `cli_session` mode the server re-reads the CLI every 10 minutes and after any `401`, so a renewed CLI session is picked up without a restart.
 
 ### API surface
 
@@ -316,6 +414,7 @@ mcnext_list_endpoints  ->  mcnext_describe_endpoint  ->  mcnext_query / read / c
 | [VS Code + Copilot setup](docs/VS-CODE-SETUP.md) | Prerequisites, `mcp.json` format, verification prompts, troubleshooting |
 | [Claude Desktop setup](docs/CLAUDE-DESKTOP-SETUP.md) | Config file locations, `mcpServers` format, logs, Claude Code CLI |
 | [Salesforce Connected App guide](docs/SALESFORCE-CONNECTED-APP-GUIDE.md) | Creating the Connected App, scope → capability mapping, secrets, rotation |
+| [Authentication modes](docs/AUTH-MODES.md) | Connected App vs CLI session, the privilege trade-off, and why one combination is refused |
 | [Deployment guide](docs/DEPLOYMENT-GUIDE.md) | stdio model, env var management, multi-org, logging, monitoring |
 | [Docker deployment](docs/DOCKER-DEPLOYMENT.md) | Image build, client integration, why `compose up -d` does not work |
 | [Architecture](docs/ARCHITECTURE.md) | Tool taxonomy, request flow, token caching, the two-host model |

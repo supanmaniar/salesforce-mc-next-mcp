@@ -370,6 +370,99 @@ try {
 
   await client2.close();
 
+  // --- auth modes ---------------------------------------------------------
+  // These are pure config assertions, so they need no credentials and no org.
+  console.log('\n--- auth modes ---');
+  const { parseAuthMode, loadConfig } = await import('../dist/config.js');
+
+  check(
+    'default auth mode is oauth_client_credentials',
+    parseAuthMode(undefined) === 'oauth_client_credentials'
+  );
+  check('"cli" aliases to cli_session', parseAuthMode('cli') === 'cli_session');
+  check('"CLI-Session" aliases to cli_session', parseAuthMode('CLI-Session') === 'cli_session');
+  check('"sfdx" aliases to cli_session', parseAuthMode('sfdx') === 'cli_session');
+  check(
+    '"connected_app" aliases to oauth_client_credentials',
+    parseAuthMode('connected_app') === 'oauth_client_credentials'
+  );
+  check('unrecognised mode returns undefined', parseAuthMode('nonsense') === undefined);
+
+  // The two safety-critical refusals.
+  const { fatalConfigErrors } = await import('../dist/config.js');
+  const base = {
+    authMode: 'oauth_client_credentials',
+    clientId: 'x',
+    clientSecret: 'y',
+    sfCliOrg: '',
+    loginUrl: 'https://login.salesforce.com',
+    bases: { mcNext: '', data360: '', data360Connect: '', login: '' },
+    instanceUrl: '',
+    apiVersion: '66.0',
+    timeoutMs: 1000,
+    maxRetries: 1,
+    allowDestructive: false,
+    allowMetadataChanges: false,
+    debug: false,
+    cacheTtlMs: 0,
+    cacheMaxEntries: 10,
+    http: { enabled: false, port: 3000, host: '127.0.0.1', authToken: '', allowedHosts: [] },
+    poll: { intervalMs: 1000, timeoutMs: 1000 },
+  };
+  const cliHttp = fatalConfigErrors({
+    ...base,
+    authMode: 'cli_session',
+    http: { ...base.http, enabled: true, authToken: '0123456789abcdef' },
+  });
+  check(
+    'cli_session + HTTP is refused even with a valid bearer token',
+    cliHttp.some((e) => e.includes('cli_session cannot be combined'))
+  );
+  check(
+    'the refusal explains why (privilege, not convenience)',
+    cliHttp.some((e) => e.includes('full privileges'))
+  );
+  check(
+    'cli_session on stdio is allowed',
+    fatalConfigErrors({ ...base, authMode: 'cli_session' }).length === 0
+  );
+  check(
+    'oauth mode over HTTP is still allowed',
+    fatalConfigErrors({
+      ...base,
+      http: { ...base.http, enabled: true, authToken: '0123456789abcdef' },
+    }).length === 0
+  );
+
+  // An unparseable mode must not silently fall back to a privilege level.
+  process.env.SF_AUTH_MODE = 'totally-bogus';
+  const parsed = loadConfig();
+  check(
+    'a bogus SF_AUTH_MODE still loads (so it can be reported)',
+    parsed.authMode === 'oauth_client_credentials'
+  );
+  check(
+    'but fatalConfigErrors rejects it',
+    fatalConfigErrors(parsed).some((e) => e.includes('not a recognised value'))
+  );
+  delete process.env.SF_AUTH_MODE;
+
+  // cli_session must not demand Connected App credentials.
+  const { missingCredentials } = await import('../dist/config.js');
+  check(
+    'cli_session does not require SF_CLIENT_ID/SF_CLIENT_SECRET',
+    missingCredentials({ ...base, authMode: 'cli_session' }).length === 0
+  );
+  check(
+    'oauth mode still requires them',
+    missingCredentials({
+      ...base,
+      authMode: 'oauth_client_credentials',
+      clientId: '',
+      clientSecret: '',
+    }).length === 2
+  );
+
   console.log(
     `\n${failures === 0 ? '✔ smoke test complete — all assertions passed' : `✘ ${failures} assertion(s) failed`}`
   );

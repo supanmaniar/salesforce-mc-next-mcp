@@ -109,8 +109,12 @@ function buildServer(cfg: ReturnType<typeof loadConfig>): McpServer {
                 bases: cfg.bases,
                 instanceUrl: cfg.instanceUrl,
                 apiVersion: cfg.apiVersion,
-                // Computed here rather than captured from main(), so this is
-                // correct per-session under the HTTP transport too.
+                authMode: cfg.authMode,
+                // Resolved against the live token, so this reflects the token
+                // actually in use rather than the configured intent.
+                authenticatedAs: tokens.username
+                  ? `${tokens.username}${tokens.viaCliSession ? ' (CLI session)' : ''}`
+                  : 'not yet authenticated',
                 credentialsConfigured: missingCredentials(cfg).length === 0,
                 basesConfigured: unconfiguredBases(cfg).length === 0,
                 allowDestructive: cfg.allowDestructive,
@@ -209,6 +213,19 @@ async function main(): Promise<void> {
     console.error(
       `[${SERVER_NAME}] WARNING: missing required environment variable(s): ${missing.join(', ')}. ` +
         'Catalog browsing will work, but API calls will fail until they are set.'
+    );
+  }
+
+  // CLI session mode is a local-development convenience, not a deployment mode.
+  // Say so loudly at every startup so it cannot be enabled by accident and then
+  // forgotten — the server is running with a human's full privileges.
+  if (cfg.authMode === 'cli_session') {
+    console.error(
+      `[${SERVER_NAME}] NOTICE: SF_AUTH_MODE=cli_session — this server is running as the Salesforce CLI ` +
+        `user${cfg.sfCliOrg ? ` for "${cfg.sfCliOrg}"` : ' for the default org'}, with that user's full ` +
+        'privileges. Its API activity is not separately attributable in Setup. Intended for local ' +
+        'development on stdio; use SF_AUTH_MODE=oauth_client_credentials for anything shared. ' +
+        'See docs/AUTH-MODES.md.'
     );
   }
 
